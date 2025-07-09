@@ -1,0 +1,13 @@
+﻿<RCC>
+    <qresource prefix="/">
+        <file>base.css</file>
+        <file>light.css</file>
+        <file>dark.css</file>
+        <file>app-icon.svg</file>
+        <file>app-icon-256.svg</file>
+        <file>close-button.svg</file>
+        <file>close-button-light.svg</file>
+        <file>theme-toggle.svg</file>
+        <file>theme-toggle-light.svg</file>
+    </qresource>
+</RCC>

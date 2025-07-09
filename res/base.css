@@ -1,0 +1,89 @@
+/* Base Styles - Common Layout and Sizing */
+
+* {
+    font: normal 12px "Microsoft Yahei";
+}
+
+/* Main Window Styles */
+QWidget#mainWindow {
+    border: 2px solid;
+}
+
+QWidget#titleBar {
+    border-bottom: 1px solid;
+}
+
+QPushButton {
+    border: none;
+    border-radius: 15px;
+}
+
+/* Search Widget Styles */
+QLineEdit#searchInput {
+    padding: 5px;
+    border: 1px solid;
+}
+
+QLineEdit#searchInput:focus {
+    outline: none;
+}
+
+/* Search Result Window Styles */
+QListWidget#searchResultsList {
+    border: 1px solid;
+}
+
+QListWidget#searchResultsList::item {
+    border: none;
+    padding: 0px;
+}
+
+/* Stock Code Label */
+QLabel#stockCodeLabel {
+    font-weight: bold;
+}
+
+
+/* Table View Styles - Minimalist Design */
+QTableView {
+    /* selection-behavior: rows;
+    show-decoration-selected: 1;
+    gridline-color: transparent; */
+    border: none;
+    outline: none;
+}
+
+QTableView::item {
+    border: none;
+}
+
+QTableView::item:selected {
+    border: none;
+    outline: none;
+}
+
+QTableView::item:selected:focus {
+    border: none;
+    outline: none;
+}
+
+QHeaderView::section {
+    border: none;
+    border-bottom: 1px solid;
+}
+
+/* Resize Grip Styles */
+QSizeGrip {
+    background-color: transparent;
+    border: none;
+}
+
+QSizeGrip::corner {
+    border: 1px solid;
+    border-radius: 2px;
+}
+
+/* Search Icon Styles */
+QLabel#searchIcon {
+    background-color: transparent;
+}

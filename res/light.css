@@ -1,0 +1,152 @@
+/* Light Theme Colors */
+
+/* Main Window Colors */
+QWidget#mainWindow {
+    background-color: #ffffff;
+    border-color: #dee2e6;
+}
+
+QWidget#titleBar {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+
+QPushButton#closeButton {
+    background-color: transparent;
+    color: #333;
+}
+
+QPushButton#closeButton:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+QPushButton#closeButton:pressed {
+    background-color: #e0e0e0;
+    color: #000;
+}
+
+/* Search Widget Colors */
+QLineEdit#searchInput {
+    background-color: white;
+    border-color: #ced4da;
+    color: #000;
+}
+
+QLineEdit#searchInput:focus {
+    border-color: #80bdff;
+}
+
+/* Search Result Window Colors */
+QListWidget#searchResultsList {
+    background-color: white;
+    border-color: #ccc;
+    color: #000;
+    selection-background-color: #e6f3ff;
+}
+
+QListWidget#searchResultsList::item:selected {
+    background-color: #e6f3ff;
+}
+
+QListWidget#searchResultsList::item:hover {
+    background-color: #f0f8ff;
+}
+
+/* Add Button Colors */
+QPushButton#addButton {
+    background-color: #4CAF50;
+    color: white;
+}
+
+QPushButton#addButton:hover {
+    background-color: #45a049;
+}
+
+QPushButton#addButton:pressed {
+    background-color: #3d8b40;
+}
+
+/* Label Colors */
+QLabel#stockCodeLabel {
+    color: #0066cc;
+}
+
+QLabel#stockNameLabel {
+    color: black;
+}
+
+QLabel#marketLabel {
+    color: #666;
+}
+
+/* Table View Colors - Minimalist Light Theme */
+QTableView {
+    background-color: #ffffff;
+    gridline-color: transparent;
+    alternate-background-color: #fafbfc;
+    /* Don't set color here - let Qt::ForegroundRole control all text colors */
+}
+
+QTableView::item {
+    background-color: #ffffff;
+}
+
+QTableView::item:alternate {
+    background-color: #fafbfc;
+}
+
+QTableView::item:hover {
+    background-color: transparent;
+}
+
+QTableView::item:selected {
+    background-color: #f0f8ff !important;
+}
+
+QTableView::item:selected:hover {
+    background-color: #f0f8ff !important;
+}
+
+QTableView::item:selected:focus {
+    background-color: #f0f8ff !important;
+}
+
+QTableView::item:selected:focus:hover {
+    background-color: #f0f8ff !important;
+}
+
+QTableView::item:selected:active {
+    background-color: #f0f8ff !important;
+}
+
+
+
+QHeaderView::section {
+    background-color: #ffffff;
+    color: #5f6368;
+    border-bottom-color: #e8eaed;
+    font-size: 13px;
+}
+
+/* Resize Grip Colors */
+QSizeGrip::corner {
+    background-color: #cccccc;
+    border-color: #999999;
+}
+
+/* Theme Toggle Button Colors */
+QPushButton#themeToggleButton {
+    background-color: transparent;
+    color: #333;
+}
+
+QPushButton#themeToggleButton:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+QPushButton#themeToggleButton:pressed {
+    background-color: #e0e0e0;
+    color: #000;
+}
