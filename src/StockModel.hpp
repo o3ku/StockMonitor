@@ -1,14 +1,19 @@
-#ifndef STOCKMODEL_HPP
-#define STOCKMODEL_HPP
+#pragma once
 
+#include "Logger.hpp"
+#include "StockInfo.hpp"
 #include <QAbstractTableModel>
 #include <QColor>
-#include <QDateTime>
+#include <QDataStream>
+#include <QMap>
 #include <QMimeData>
 #include <QStringList>
-#include <QMap>
-#include "StockInfo.hpp"
-#include "Logger.hpp"
+
+// MIME type constants for drag and drop
+namespace StockConstants
+{
+    constexpr const char *STOCK_ROW_MIME_TYPE = "application/x-stockrow";
+}
 
 class StockModel : public QAbstractTableModel
 {
@@ -43,12 +48,10 @@ public:
 
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
     {
-        if (!index.isValid() || index.row() >= m_stockCodes.size())
-            return QVariant();
+        if (!index.isValid() || index.row() >= m_stockCodes.size()) return QVariant();
 
         const QString &code = m_stockCodes.at(index.row());
-        if (!m_stockData.contains(code))
-            return QVariant();
+        if (!m_stockData.contains(code)) return QVariant();
 
         const StockInfo &stock = m_stockData.value(code);
 
@@ -100,8 +103,7 @@ public:
         {
             switch (role)
             {
-            case Qt::DisplayRole:
-            {
+            case Qt::DisplayRole: {
 
                 switch (section)
                 {
@@ -122,8 +124,7 @@ public:
 
     Qt::ItemFlags flags(const QModelIndex &index) const override
     {
-        if (!index.isValid())
-            return Qt::NoItemFlags;
+        if (!index.isValid()) return Qt::NoItemFlags;
 
         return Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled;
     }
@@ -137,7 +138,7 @@ public:
     QStringList mimeTypes() const override
     {
         QStringList types;
-        types << "application/x-stockrow";
+        types << StockConstants::STOCK_ROW_MIME_TYPE;
         return types;
     }
 
@@ -150,13 +151,13 @@ public:
 
         foreach (const QModelIndex &index, indexes)
         {
-            if (index.isValid() && index.column() == 0) // Only process first column to avoid duplicates
+            if (index.isValid() && index.column() == 0)  // Only process first column to avoid duplicates
             {
                 stream << index.row();
             }
         }
 
-        mimeData->setData("application/x-stockrow", encodedData);
+        mimeData->setData(StockConstants::STOCK_ROW_MIME_TYPE, encodedData);
         return mimeData;
     }
 
@@ -164,11 +165,9 @@ public:
     {
         Q_UNUSED(column)
 
-        if (action == Qt::IgnoreAction)
-            return true;
+        if (action == Qt::IgnoreAction) return true;
 
-        if (!data->hasFormat("application/x-stockrow"))
-            return false;
+        if (!data->hasFormat(StockConstants::STOCK_ROW_MIME_TYPE)) return false;
 
         int beginRow;
         if (row != -1)
@@ -178,7 +177,7 @@ public:
         else
             beginRow = rowCount(QModelIndex());
 
-        QByteArray encodedData = data->data("application/x-stockrow");
+        QByteArray encodedData = data->data(StockConstants::STOCK_ROW_MIME_TYPE);
         QDataStream stream(&encodedData, QIODevice::ReadOnly);
         QList<int> sourceRows;
 
@@ -208,7 +207,6 @@ public:
         // Check if stock already exists
         if (m_stockData.contains(stock.code()))
         {
-            Logger::info(QString("Stock %1 already exists!").arg(stock.code()));
             return;
         }
 
@@ -217,7 +215,6 @@ public:
         m_stockData.insert(stock.code(), stock);
         endInsertRows();
 
-        Logger::info(QString("Added stock: %1 - %2").arg(stock.code(), stock.name()));
         emit stockListChanged();
     }
 
@@ -237,14 +234,9 @@ public:
                     QModelIndex bottomRight = index(row, ColumnCount - 1);
                     emit dataChanged(topLeft, bottomRight);
                     updatedCount++;
-                    Logger::info(QString("Updated stock %1: %2 at price %3")
-                                     .arg(newStock.code())
-                                     .arg(newStock.name())
-                                     .arg(QString::number(newStock.currentPrice(), 'f', 2)));
                 }
             }
         }
-        Logger::info(QString("StockModel: Updated %1 stocks, triggered dataChanged signals").arg(updatedCount));
     }
 
     void removeStock(int row)
@@ -267,8 +259,7 @@ public:
         {
             // Calculate the correct destination index for beginMoveRows
             int destinationIndex = to;
-            if (to > from)
-                destinationIndex++; // When moving down, destination is after the target row
+            if (to > from) destinationIndex++;  // When moving down, destination is after the target row
 
             if (beginMoveRows(QModelIndex(), from, from, QModelIndex(), destinationIndex))
             {
@@ -276,7 +267,6 @@ public:
                 m_stockCodes.insert(to, code);
                 endMoveRows();
                 emit stockListChanged();
-                Logger::info(QString("Moved stock from row %1 to row %2").arg(from).arg(to));
             }
             else
             {
@@ -317,11 +307,11 @@ signals:
 private:
     QString formatVolume(long long volume) const
     {
-        if (volume >= 100000000) // 1亿
+        if (volume >= 100000000)  // 1亿
         {
             return QString("%1亿").arg(volume / 100000000.0, 0, 'f', 2);
         }
-        else if (volume >= 10000) // 1万
+        else if (volume >= 10000)  // 1万
         {
             return QString("%1万").arg(volume / 10000.0, 0, 'f', 1);
         }
@@ -333,45 +323,42 @@ private:
 
     QColor getStockColor(const StockInfo &stock) const
     {
-        double change = stock.change();
+        // double change = stock.change();
 
-        // Detect current theme for better color contrast
-        QString styleSheet = qApp->styleSheet();
-        bool isDarkTheme = styleSheet.contains("dark.css") || styleSheet.contains("#2b2b2b");
-
-        if (change > 0)
-        {
-            // Red for up (涨红) - brighter red for dark theme
-            return isDarkTheme ? QColor(255, 85, 85) : QColor(220, 20, 60);
-        }
-        else if (change < 0)
-        {
-            // Green for down (跌绿) - brighter green for dark theme
-            return isDarkTheme ? QColor(85, 255, 85) : QColor(34, 139, 34);
-        }
-        else
-        {
-            // Gray for flat (平灰) - lighter gray for dark theme
-            return isDarkTheme ? QColor(180, 180, 180) : QColor(128, 128, 128);
-        }
+        // auto isDarkTheme = ConfigManager::instance().getConfig().theme == "dark";
+        // if (change > 0)
+        // {
+        //     // Red for up (涨红) - brighter red for dark theme
+        //     return isDarkTheme ? QColor(255, 85, 85) : QColor(220, 20, 60);
+        // }
+        // else if (change < 0)
+        // {
+        //     // Green for down (跌绿) - brighter green for dark theme
+        //     return isDarkTheme ? QColor(85, 255, 85) : QColor(34, 139, 34);
+        // }
+        // else
+        // {
+        //     // Gray for flat (平灰) - lighter gray for dark theme
+        //     return isDarkTheme ? QColor(180, 180, 180) : QColor(128, 128, 128);
+        // }
+        return {};
     }
 
     QColor getDefaultTextColor() const
     {
-        // Detect current theme by checking application stylesheet
-        QString styleSheet = qApp->styleSheet();
-        if (styleSheet.contains("dark.css") || styleSheet.contains("#2b2b2b"))
-        {
-            return QColor(255, 255, 255); // White for dark theme
-        }
-        else
-        {
-            return QColor(0, 0, 0); // Black for light theme
-        }
+        // // Use enum to detect current theme
+        // auto isDarkTheme = ConfigManager::instance().getConfig().theme == "dark";
+        // if (isDarkTheme)
+        // {
+        //     return QColor(255, 255, 255);  // White for dark theme
+        // }
+        // else
+        // {
+        //     return QColor(0, 0, 0);  // Black for light theme
+        // }
+        return {};
     }
 
-    QMap<QString, StockInfo> m_stockData; // Map for fast lookup by code
-    QStringList m_stockCodes;             // List to maintain display order
+    QMap<QString, StockInfo> m_stockData;  // Map for fast lookup by code
+    QStringList m_stockCodes;              // List to maintain display order
 };
-
-#endif // STOCKMODEL_HPP

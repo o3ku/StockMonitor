@@ -5,7 +5,7 @@
 }
 
 /* Main Window Styles */
-QWidget#mainWindow {
+MainWindow {
     border: 2px solid;
 }
 
@@ -13,18 +13,18 @@ QWidget#titleBar {
     border-bottom: 1px solid;
 }
 
-QPushButton {
+#titleBar QPushButton {
     border: none;
     border-radius: 15px;
 }
 
 /* Search Widget Styles */
-QLineEdit#searchInput {
+#titleBar QLineEdit {
     padding: 5px;
     border: 1px solid;
 }
 
-QLineEdit#searchInput:focus {
+#titleBar QLineEdit:focus {
     outline: none;
 }
 
@@ -81,9 +81,4 @@ QSizeGrip {
 QSizeGrip::corner {
     border: 1px solid;
     border-radius: 2px;
-}
-
-/* Search Icon Styles */
-QLabel#searchIcon {
-    background-color: transparent;
 }

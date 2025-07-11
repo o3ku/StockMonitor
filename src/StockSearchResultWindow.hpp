@@ -1,23 +1,22 @@
-#ifndef STOCKSEARCHRESULTWINDOW_HPP
-#define STOCKSEARCHRESULTWINDOW_HPP
+#pragma once
 
-#include <QWidget>
-#include <QListWidget>
-#include <QVBoxLayout>
-#include <QLabel>
+#include <QApplication>
+#include <QDesktopWidget>
+#include <QFocusEvent>
 #include <QHBoxLayout>
 #include <QKeyEvent>
-#include <QFocusEvent>
-#include <QApplication>
-#include <QStyle>
-#include <QDesktopWidget>
-#include <QScreen>
-#include <QTimer>
+#include <QLabel>
+#include <QListWidget>
 #include <QListWidgetItem>
+#include <QScreen>
+#include <QStyle>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
 #include <algorithm>
 
-#include "StockSearchResult.hpp"
 #include "Logger.hpp"
+#include "StockSearchResult.hpp"
 
 class StockSearchResultWindow : public QWidget
 {
@@ -25,7 +24,10 @@ class StockSearchResultWindow : public QWidget
 
 public:
     explicit StockSearchResultWindow(QWidget *parent = nullptr)
-        : QWidget(parent), m_resultsListWidget(nullptr), m_mainLayout(nullptr), m_selectedIndex(-1)
+        : QWidget(parent)
+        , m_resultsListWidget(nullptr)
+        , m_mainLayout(nullptr)
+        , m_selectedIndex(-1)
     {
         setupUI();
 
@@ -145,8 +147,7 @@ protected:
     void focusOutEvent(QFocusEvent *event) override
     {
         // Delay hiding to allow clicking on results
-        QTimer::singleShot(100, this, [this]()
-                           {
+        QTimer::singleShot(100, this, [this]() {
             // Check if focus moved to search widget or stayed within result window
             QWidget *focusWidget = QApplication::focusWidget();
             bool shouldHide = true;
@@ -174,7 +175,8 @@ protected:
             if (shouldHide)
             {
                 hide();
-            } });
+            }
+        });
 
         QWidget::focusOutEvent(event);
     }
@@ -202,10 +204,10 @@ private:
         m_resultsListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         m_resultsListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
-        connect(m_resultsListWidget, &QListWidget::itemClicked, this, [this](QListWidgetItem *item)
-                {
+        connect(m_resultsListWidget, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
             int row = m_resultsListWidget->row(item);
-            onItemClicked(row); });
+            onItemClicked(row);
+        });
 
         m_mainLayout->addWidget(m_resultsListWidget);
     }
@@ -248,11 +250,9 @@ private:
         QList<StockSearchResult> sortedResults = results;
 
         // Sort by market priority
-        std::sort(sortedResults.begin(), sortedResults.end(),
-                  [this](const StockSearchResult &a, const StockSearchResult &b)
-                  {
-                      return getMarketPriority(a.code()) < getMarketPriority(b.code());
-                  });
+        std::sort(sortedResults.begin(), sortedResults.end(), [this](const StockSearchResult &a, const StockSearchResult &b) {
+            return getMarketPriority(a.code()) < getMarketPriority(b.code());
+        });
 
         return sortedResults;
     }
@@ -262,9 +262,7 @@ private:
         QString upperCode = code.toUpper();
 
         // 1. 深圳股票 (Shenzhen stocks) - 000xxx, 002xxx, 300xxx
-        if (upperCode.startsWith("SZ") ||
-            (upperCode.startsWith("0") && !upperCode.startsWith("0F")) ||
-            upperCode.startsWith("3"))
+        if (upperCode.startsWith("SZ") || (upperCode.startsWith("0") && !upperCode.startsWith("0F")) || upperCode.startsWith("3"))
         {
             return 1;
         }
@@ -296,5 +294,3 @@ private:
     QList<StockSearchResult> m_searchResults;
     int m_selectedIndex;
 };
-
-#endif // STOCKSEARCHRESULTWINDOW_HPP

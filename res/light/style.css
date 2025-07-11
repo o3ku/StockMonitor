@@ -1,7 +1,7 @@
 /* Light Theme Colors */
 
 /* Main Window Colors */
-QWidget#mainWindow {
+MainWindow {
     background-color: #ffffff;
     border-color: #dee2e6;
 }
@@ -11,29 +11,30 @@ QWidget#titleBar {
     border-color: #dee2e6;
 }
 
-QPushButton#closeButton {
+#titleBar QPushButton {
     background-color: transparent;
     color: #333;
 }
 
-QPushButton#closeButton:hover {
+#titleBar QPushButton:hover {
     background-color: #f0f0f0;
     color: #333;
 }
 
-QPushButton#closeButton:pressed {
+#titleBar QPushButton:pressed {
     background-color: #e0e0e0;
     color: #000;
 }
 
+
 /* Search Widget Colors */
-QLineEdit#searchInput {
+#titleBar QLineEdit {
     background-color: white;
     border-color: #ced4da;
     color: #000;
 }
 
-QLineEdit#searchInput:focus {
+#titleBar QLineEdit:focus {
     border-color: #80bdff;
 }
 
@@ -51,20 +52,6 @@ QListWidget#searchResultsList::item:selected {
 
 QListWidget#searchResultsList::item:hover {
     background-color: #f0f8ff;
-}
-
-/* Add Button Colors */
-QPushButton#addButton {
-    background-color: #4CAF50;
-    color: white;
-}
-
-QPushButton#addButton:hover {
-    background-color: #45a049;
-}
-
-QPushButton#addButton:pressed {
-    background-color: #3d8b40;
 }
 
 /* Label Colors */
@@ -133,20 +120,4 @@ QHeaderView::section {
 QSizeGrip::corner {
     background-color: #cccccc;
     border-color: #999999;
-}
-
-/* Theme Toggle Button Colors */
-QPushButton#themeToggleButton {
-    background-color: transparent;
-    color: #333;
-}
-
-QPushButton#themeToggleButton:hover {
-    background-color: #f0f0f0;
-    color: #333;
-}
-
-QPushButton#themeToggleButton:pressed {
-    background-color: #e0e0e0;
-    color: #000;
 }

@@ -1,25 +1,32 @@
-#ifndef STOCKTABLEVIEW_HPP
-#define STOCKTABLEVIEW_HPP
+#pragma once
 
-#include <QTableView>
-#include <QHeaderView>
-#include <QMenu>
+#include "Logger.hpp"
+#include "StockInfo.hpp"
+#include "StockModel.hpp"
+#include <QAbstractItemView>
 #include <QAction>
 #include <QContextMenuEvent>
+#include <QDragEnterEvent>
+#include <QDragLeaveEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
+#include <QHeaderView>
 #include <QKeyEvent>
+#include <QMenu>
 #include <QMessageBox>
-#include <QAbstractItemView>
-#include <QStyledItemDelegate>
+#include <QPaintEvent>
 #include <QPainter>
-#include "StockModel.hpp"
-#include "StockInfo.hpp"
-#include "Logger.hpp"
+#include <QStyledItemDelegate>
+#include <QTableView>
 
 // Custom delegate to preserve text colors in selected state
 class ColorPreservingDelegate : public QStyledItemDelegate
 {
 public:
-    explicit ColorPreservingDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
+    explicit ColorPreservingDelegate(QObject *parent = nullptr)
+        : QStyledItemDelegate(parent)
+    {
+    }
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
     {
@@ -45,7 +52,9 @@ class StockTableView : public QTableView
 
 public:
     explicit StockTableView(QWidget *parent = nullptr)
-        : QTableView(parent), m_stockModel(new StockModel(this))
+        : QTableView(parent)
+        , m_stockModel(new StockModel(this))
+        , m_dropIndicatorRow(-1)
     {
         setupView();
         setupContextMenu();
@@ -55,8 +64,7 @@ public:
         setColumnWidth(StockModel::ChangePercentColumn, 70);
 
         // Connect model signals
-        connect(m_stockModel, &StockModel::stockListChanged,
-                this, &StockTableView::stockListChanged);
+        connect(m_stockModel, &StockModel::stockListChanged, this, &StockTableView::stockListChanged);
     }
 
     void addStock(const StockInfo &stock)
@@ -67,8 +75,7 @@ public:
         {
             if (existingStock.code() == stock.code())
             {
-                QMessageBox::information(this, "Information",
-                                         QString("Stock %1 already exists!").arg(stock.code()));
+                QMessageBox::information(this, "Information", QString("Stock %1 already exists!").arg(stock.code()));
                 return;
             }
         }
@@ -95,6 +102,101 @@ signals:
     void stockListChanged();
 
 protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        QTableView::paintEvent(event);
+
+        // Draw custom drop indicator for full row
+        if (m_dropIndicatorRow >= 0)
+        {
+            QPainter painter(viewport());
+            painter.setPen(QPen(QColor(0, 120, 215), 2));  // Blue line
+
+            int y;
+            if (m_dropIndicatorRow >= model()->rowCount())
+            {
+                // Drop at the end
+                QRect lastRowRect = visualRect(model()->index(model()->rowCount() - 1, 0));
+                y = lastRowRect.bottom() + 1;
+            }
+            else
+            {
+                // Drop before the specified row
+                QRect rowRect = visualRect(model()->index(m_dropIndicatorRow, 0));
+                y = rowRect.top() - 1;
+            }
+
+            painter.drawLine(0, y, viewport()->width(), y);
+        }
+    }
+
+    void dragEnterEvent(QDragEnterEvent *event) override
+    {
+        if (event->source() == this && event->mimeData()->hasFormat(StockConstants::STOCK_ROW_MIME_TYPE))
+        {
+            event->acceptProposedAction();
+            m_dropIndicatorRow = -1;
+            viewport()->update();
+        }
+        else
+        {
+            QTableView::dragEnterEvent(event);
+        }
+    }
+
+    void dragMoveEvent(QDragMoveEvent *event) override
+    {
+        if (event->source() == this && event->mimeData()->hasFormat(StockConstants::STOCK_ROW_MIME_TYPE))
+        {
+            QModelIndex index = indexAt(event->pos());
+            int newDropRow = -1;
+
+            if (index.isValid())
+            {
+                QRect itemRect = visualRect(index);
+                if (event->pos().y() < itemRect.center().y())
+                {
+                    newDropRow = index.row();
+                }
+                else
+                {
+                    newDropRow = index.row() + 1;
+                }
+            }
+            else
+            {
+                // Drop at the end if not over any item
+                newDropRow = model()->rowCount();
+            }
+
+            if (newDropRow != m_dropIndicatorRow)
+            {
+                m_dropIndicatorRow = newDropRow;
+                viewport()->update();
+            }
+
+            event->acceptProposedAction();
+        }
+        else
+        {
+            QTableView::dragMoveEvent(event);
+        }
+    }
+
+    void dragLeaveEvent(QDragLeaveEvent *event) override
+    {
+        m_dropIndicatorRow = -1;
+        viewport()->update();
+        QTableView::dragLeaveEvent(event);
+    }
+
+    void dropEvent(QDropEvent *event) override
+    {
+        m_dropIndicatorRow = -1;
+        viewport()->update();
+        QTableView::dropEvent(event);
+    }
+
     void contextMenuEvent(QContextMenuEvent *event) override
     {
         QModelIndex index = indexAt(event->pos());
@@ -219,7 +321,7 @@ private:
         setFocusPolicy(Qt::StrongFocus);
 
         // Set sorting
-        setSortingEnabled(false); // Disable sorting to maintain user order
+        setSortingEnabled(false);  // Disable sorting to maintain user order
 
         // Set compact row height
 
@@ -260,6 +362,7 @@ private:
     QAction *m_moveDownAction;
     QAction *m_moveToTopAction;
     QAction *m_moveToBottomAction;
-};
 
-#endif // STOCKTABLEVIEW_HPP
+    // Drag and drop indicator
+    int m_dropIndicatorRow;
+};

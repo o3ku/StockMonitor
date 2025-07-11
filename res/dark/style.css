@@ -1,7 +1,7 @@
 /* Dark Theme Colors */
 
 /* Main Window Colors */
-QWidget#mainWindow {
+MainWindow {
     background-color: #2b2b2b;
     border-color: #404040;
 }
@@ -11,29 +11,29 @@ QWidget#titleBar {
     border-color: #404040;
 }
 
-QPushButton#closeButton {
+#titleBar QPushButton {
     background-color: transparent;
     color: #ffffff;
 }
 
-QPushButton#closeButton:hover {
+#titleBar QPushButton:hover {
     background-color: #404040;
     color: #ffffff;
 }
 
-QPushButton#closeButton:pressed {
+#titleBar QPushButton:pressed {
     background-color: #555555;
     color: #ffffff;
 }
 
 /* Search Widget Colors */
-QLineEdit#searchInput {
+#titleBar QLineEdit {
     background-color: #3c3c3c;
     border-color: #555555;
     color: #ffffff;
 }
 
-QLineEdit#searchInput:focus {
+#titleBar QLineEdit:focus {
     border-color: #0078d4;
 }
 
@@ -133,20 +133,4 @@ QHeaderView::section {
 QSizeGrip::corner {
     background-color: #555555;
     border-color: #777777;
-}
-
-/* Theme Toggle Button Colors */
-QPushButton#themeToggleButton {
-    background-color: transparent;
-    color: #ffffff;
-}
-
-QPushButton#themeToggleButton:hover {
-    background-color: #404040;
-    color: #ffffff;
-}
-
-QPushButton#themeToggleButton:pressed {
-    background-color: #555555;
-    color: #ffffff;
 }

@@ -1,47 +1,48 @@
-#ifndef STOCKSEARCHWIDGET_HPP
-#define STOCKSEARCHWIDGET_HPP
+#pragma once
 
-#include <QWidget>
-#include <QLineEdit>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QTimer>
-#include <QKeyEvent>
-#include <QFocusEvent>
 #include <QApplication>
+#include <QFocusEvent>
+#include <QKeyEvent>
+#include <QLineEdit>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWidget>
 
-#include "StockSearchResult.hpp"
-#include "StockApiService.hpp"
-#include "StockSearchResultWindow.hpp"
-
-class StockSearchWidget : public QWidget
+class StockSearchWidget : public QLineEdit
 {
     Q_OBJECT
 
 public:
     explicit StockSearchWidget(QWidget *parent = nullptr)
-        : QWidget(parent), m_searchLineEdit(nullptr), m_searchTimer(new QTimer(this)),
-          m_mainLayout(nullptr), m_resultWindow(nullptr), m_isSearching(false)
+        : QLineEdit(parent)
+        , m_searchTimer(new QTimer(this))
+        , m_mainLayout(nullptr)
+        // , m_resultWindow(nullptr)
+        , m_isSearching(false)
     {
-        setupUI();
+        setObjectName("searchInput");
+        setPlaceholderText("Enter stock code or name to search...");
+        installEventFilter(this);
+        connect(this, &QLineEdit::textChanged, this, &StockSearchWidget::onTextChanged);
 
         m_searchTimer->setSingleShot(true);
         m_searchTimer->setInterval(SEARCH_DELAY);
         connect(m_searchTimer, &QTimer::timeout, this, &StockSearchWidget::onSearchTimer);
 
-        connect(&StockApiService::instance(), &StockApiService::searchCompleted,
-                this, &StockSearchWidget::onSearchCompleted);
+        // connect(&StockApiService::instance(), &StockApiService::searchCompleted, this, &StockSearchWidget::onSearchCompleted);
 
         // Create search result window
-        m_resultWindow = new StockSearchResultWindow(this);
-        connect(m_resultWindow, &StockSearchResultWindow::stockSelected,
-                this, &StockSearchWidget::onResultWindowStockSelected);
-        connect(m_resultWindow, &StockSearchResultWindow::escapePressed,
-                this, &StockSearchWidget::escapePressed);
+        // m_resultWindow = new StockSearchResultWindow(this);
+        // connect(m_resultWindow, &StockSearchResultWindow::stockSelected, this, &StockSearchWidget::onResultWindowStockSelected);
+        // connect(m_resultWindow, &StockSearchResultWindow::escapePressed, this, &StockSearchWidget::escapePressed);
 
-        // Install application-wide event filter for focus monitoring
-        qApp->installEventFilter(this);
+        // // Install application-wide event filter for focus monitoring
+        // qApp->installEventFilter(this);
+    }
+
+    void setExistingStocks(const QStringList &stockCodes)
+    {
+        m_existingStockCodes = stockCodes;
     }
 
 signals:
@@ -51,7 +52,7 @@ signals:
 private slots:
     void onTextChanged()
     {
-        QString text = m_searchLineEdit->text().trimmed();
+        QString text = this->text();
 
         m_searchTimer->stop();
 
@@ -66,12 +67,11 @@ private slots:
 
     void onSearchTimer()
     {
-        QString text = m_searchLineEdit->text().trimmed();
+        QString text = this->text().trimmed();
         if (!text.isEmpty() && text.length() >= 1 && !m_isSearching)
         {
-            Logger::info(QString("Auto search: '%1'").arg(text));
             m_isSearching = true;
-            StockApiService::instance().searchStocksAsync(text);
+            // StockApiService::instance().searchStocksAsync(text);
         }
     }
 
@@ -79,24 +79,41 @@ private slots:
     {
         m_isSearching = false;
 
-        if (!results.isEmpty())
+        // Filter out stocks that already exist in the table
+        QList<StockSearchResult> filteredResults;
+        for (const StockSearchResult &result : results)
         {
-            Logger::info(QString("Search completed with %1 results").arg(results.size()));
-            showResults(results);
+            QString resultCode = result.code().toUpper();
+            bool alreadyExists = false;
+
+            for (const QString &existingCode : m_existingStockCodes)
+            {
+                if (resultCode == existingCode.toUpper())
+                {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+
+            if (!alreadyExists)
+            {
+                filteredResults.append(result);
+            }
+        }
+
+        if (!filteredResults.isEmpty())
+        {
+            showResults(filteredResults);
         }
         else
         {
-            Logger::info("No matching stocks found");
             hideResults();
         }
     }
 
     void onResultWindowStockSelected(const StockSearchResult &result)
     {
-        Logger::info(QString("Stock selected from result window: %1 - %2").arg(result.code(), result.name()));
-
-        // Clear search text when adding stock
-        m_searchLineEdit->clear();
+        clear();
         hideResults();
         emit stockSelected(result);
     }
@@ -105,139 +122,135 @@ protected:
     void showEvent(QShowEvent *event) override
     {
         QWidget::showEvent(event);
-
-        // Set focus to search input when widget becomes visible
-        if (m_searchLineEdit)
-        {
-            m_searchLineEdit->setFocus();
-        }
+        // m_searchLineEdit->setFocus();
     }
 
     bool eventFilter(QObject *obj, QEvent *event) override
     {
-        // Handle ESC key in search line edit
-        if (obj == m_searchLineEdit && event->type() == QEvent::KeyPress)
-        {
-            QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
-            if (keyEvent->key() == Qt::Key_Escape)
-            {
-                // Always hide search results first
-                hideResults();
+        // // Handle ESC key in search line edit
+        // if (obj == m_searchLineEdit && event->type() == QEvent::KeyPress)
+        // {
+        //     QKeyEvent *keyEvent = static_cast<QKeyEvent *>(event);
+        //     if (keyEvent->key() == Qt::Key_Escape)
+        //     {
+        //         // Always hide search results first
+        //         hideResults();
 
-                // Check if search box has content
-                if (!m_searchLineEdit->text().isEmpty())
-                {
-                    // If content is not empty, clear it
-                    m_searchLineEdit->clear();
-                }
-                else
-                {
-                    // If content is empty, hide main window
-                    emit escapePressed();
-                }
-                return true; // Event handled
-            }
-        }
+        //         // Check if search box has content
+        //         if (!m_searchLineEdit->text().isEmpty())
+        //         {
+        //             // If content is not empty, clear it
+        //             m_searchLineEdit->clear();
+        //         }
+        //         else
+        //         {
+        //             // If content is empty, hide main window
+        //             emit escapePressed();
+        //         }
+        //         return true;  // Event handled
+        //     }
+        // }
 
-        // Handle focus changes for auto-hiding search results
-        if (event->type() == QEvent::FocusIn && m_resultWindow->isVisible())
-        {
-            QWidget *focusWidget = qobject_cast<QWidget *>(obj);
-            if (focusWidget)
-            {
-                // Check if the new focus widget is related to search functionality
-                bool isSearchRelated = false;
+        // // Handle focus changes for auto-hiding search results
+        // if (event->type() == QEvent::FocusIn && m_resultWindow->isVisible())
+        // {
+        //     QWidget *focusWidget = qobject_cast<QWidget *>(obj);
+        //     if (focusWidget)
+        //     {
+        //         // Check if the new focus widget is related to search functionality
+        //         bool isSearchRelated = false;
 
-                QWidget *widget = focusWidget;
-                while (widget)
-                {
-                    if (widget == this || widget == m_resultWindow)
-                    {
-                        isSearchRelated = true;
-                        break;
-                    }
-                    widget = widget->parentWidget();
-                }
+        //         QWidget *widget = focusWidget;
+        //         while (widget)
+        //         {
+        //             if (widget == this || widget == m_resultWindow)
+        //             {
+        //                 isSearchRelated = true;
+        //                 break;
+        //             }
+        //             widget = widget->parentWidget();
+        //         }
 
-                // If focus moved to unrelated widget, hide results
-                if (!isSearchRelated)
-                {
-                    QTimer::singleShot(50, this, [this]()
-                                       { hideResults(); });
-                }
-            }
-        }
+        //         // If focus moved to unrelated widget, hide results
+        //         if (!isSearchRelated)
+        //         {
+        //             QTimer::singleShot(50, this, [this]() {
+        //                 hideResults();
+        //             });
+        //         }
+        //     }
+        // }
 
         return QWidget::eventFilter(obj, event);
     }
 
     void keyPressEvent(QKeyEvent *event) override
     {
-        if (event->key() == Qt::Key_Escape)
-        {
-            // Always hide search results first
-            hideResults();
+        // if (event->key() == Qt::Key_Escape)
+        // {
+        //     // Always hide search results first
+        //     hideResults();
 
-            // Check if search box has content
-            if (!m_searchLineEdit->text().isEmpty())
-            {
-                // If content is not empty, clear it
-                m_searchLineEdit->clear();
-            }
-            else
-            {
-                // If content is empty, hide main window
-                emit escapePressed();
-            }
-            return;
-        }
+        //     // Check if search box has content
+        //     if (!m_searchLineEdit->text().isEmpty())
+        //     {
+        //         // If content is not empty, clear it
+        //         m_searchLineEdit->clear();
+        //     }
+        //     else
+        //     {
+        //         // If content is empty, hide main window
+        //         emit escapePressed();
+        //     }
+        //     return;
+        // }
 
-        // Forward keyboard events to result window (if it's visible)
-        if (m_resultWindow->isVisible())
-        {
-            QApplication::sendEvent(m_resultWindow, event);
-            return;
-        }
+        // // Forward keyboard events to result window (if it's visible)
+        // if (m_resultWindow->isVisible())
+        // {
+        //     QApplication::sendEvent(m_resultWindow, event);
+        //     return;
+        // }
 
         QWidget::keyPressEvent(event);
     }
 
     void focusOutEvent(QFocusEvent *event) override
     {
-        // Delay hiding to allow clicking on result window
-        QTimer::singleShot(100, this, [this]()
-                           {
-            // Check if focus is on search box or result window
-            QWidget *focusWidget = QApplication::focusWidget();
-            bool shouldHide = true;
+        // // Delay hiding to allow clicking on result window
+        // QTimer::singleShot(100, this, [this]() {
+        //     // Check if focus is on search box or result window
+        //     QWidget *focusWidget = QApplication::focusWidget();
+        //     bool shouldHide = true;
 
-            if (focusWidget)
-            {
-                // Check if focus is on search line edit
-                if (focusWidget == m_searchLineEdit)
-                {
-                    shouldHide = false;
-                }
-                // Check if focus is on result window or its children
-                else if (m_resultWindow->isVisible())
-                {
-                    QWidget *widget = focusWidget;
-                    while (widget)
-                    {
-                        if (widget == m_resultWindow)
-                        {
-                            shouldHide = false;
-                            break;
-                        }
-                        widget = widget->parentWidget();
-                    }
-                }
-            }
+        //     if (focusWidget)
+        //     {
+        //         // Check if focus is on search line edit
+        //         if (focusWidget == m_searchLineEdit)
+        //         {
+        //             shouldHide = false;
+        //         }
+        //         // Check if focus is on result window or its children
+        //         else if (m_resultWindow->isVisible())
+        //         {
+        //             QWidget *widget = focusWidget;
+        //             while (widget)
+        //             {
+        //                 if (widget == m_resultWindow)
+        //                 {
+        //                     shouldHide = false;
+        //                     break;
+        //                 }
+        //                 widget = widget->parentWidget();
+        //             }
+        //         }
+        //     }
 
-            if (shouldHide)
-            {
-                hideResults();
-            } });
+        //     if (shouldHide)
+        //     {
+        //         hideResults();
+        //     }
+        // });
 
         QWidget::focusOutEvent(event);
     }
@@ -245,55 +258,33 @@ protected:
 private:
     void setupUI()
     {
-        m_mainLayout = new QVBoxLayout(this);
-        m_mainLayout->setContentsMargins(0, 0, 0, 0);
-        m_mainLayout->setSpacing(0);
-
-        QWidget *searchContainer = new QWidget(this);
-        QHBoxLayout *searchLayout = new QHBoxLayout(searchContainer);
-        searchLayout->setContentsMargins(0, 0, 0, 0);
-        searchLayout->setSpacing(5);
-
-        m_searchLineEdit = new QLineEdit(this);
-        m_searchLineEdit->setObjectName("searchInput");
-        m_searchLineEdit->setPlaceholderText("Enter stock code or name to search...");
-        m_searchLineEdit->installEventFilter(this);
-        searchLayout->addWidget(m_searchLineEdit);
-        connect(m_searchLineEdit, &QLineEdit::textChanged, this, &StockSearchWidget::onTextChanged);
-
-        m_mainLayout->addWidget(searchContainer);
     }
 
     void showResults(const QList<StockSearchResult> &results)
     {
-        // Calculate search box position on screen
-        QPoint globalPos = m_searchLineEdit->mapToGlobal(QPoint(0, m_searchLineEdit->height()));
+        // // Calculate search box position on screen
+        // QPoint globalPos = m_searchLineEdit->mapToGlobal(QPoint(0, m_searchLineEdit->height()));
 
-        // Get search box width to match result window width
-        int searchBoxWidth = m_searchLineEdit->width();
+        // // Get search box width to match result window width
+        // int searchBoxWidth = m_searchLineEdit->width();
 
-        // Show search result window with matching width
-        m_resultWindow->showResults(results, globalPos, searchBoxWidth);
+        // // Show search result window with matching width
+        // m_resultWindow->showResults(results, globalPos, searchBoxWidth);
 
-        // Ensure search box keeps focus after showing results
-        m_searchLineEdit->setFocus();
-
-        Logger::info(QString("Showing %1 search suggestions in popup window").arg(results.size()));
+        // // Ensure search box keeps focus after showing results
+        // m_searchLineEdit->setFocus();
     }
 
     void hideResults()
     {
-        m_resultWindow->hideResults();
+        // m_resultWindow->hideResults();
     }
 
-    QLineEdit *m_searchLineEdit;
     QTimer *m_searchTimer;
     QVBoxLayout *m_mainLayout;
-    StockSearchResultWindow *m_resultWindow;
 
     bool m_isSearching;
+    QStringList m_existingStockCodes;
 
     static const int SEARCH_DELAY = 300;
 };
-
-#endif // STOCKSEARCHWIDGET_HPP

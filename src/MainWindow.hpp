@@ -1,94 +1,98 @@
-#ifndef MAINWINDOW_HPP
-#define MAINWINDOW_HPP
+#pragma once
 
-#include <QMainWindow>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QStatusBar>
-#include <QLabel>
-#include <QTimer>
-#include <QPushButton>
-#include <QMouseEvent>
-#include <QWheelEvent>
-#include <QKeyEvent>
-#include <QSizeGrip>
-#include <QResizeEvent>
-#include <QSettings>
-#include <QStandardPaths>
-#include <QDir>
+#include <QAction>
 #include <QApplication>
-#include <QMessageBox>
 #include <QDateTime>
 #include <QFile>
-#include <QTextStream>
-#include <QSystemTrayIcon>
-#include <QMenu>
-#include <QAction>
+#include <QHBoxLayout>
 #include <QIcon>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMessageBox>
+#include <QMetaEnum>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
+#include <QPushButton>
+#include <QResizeEvent>
+#include <QSizeGrip>
+#include <QStatusBar>
+#include <QSystemTrayIcon>
+#include <QTextStream>
+#include <QTimer>
+#include <QVBoxLayout>
+#include <QWheelEvent>
 
 #ifdef Q_OS_WIN
-#include <windows.h>
+    #include <windows.h>
 #endif
 
+#include "Logger.hpp"
+#include "StockApiService.hpp"
+#include "StockConfig.hpp"
+#include "StockInfo.hpp"
+#include "StockSearchResult.hpp"
 #include "StockSearchWidget.hpp"
 #include "StockTableView.hpp"
-#include "StockSearchResult.hpp"
-#include "StockInfo.hpp"
-#include "StockApiService.hpp"
-#include "Logger.hpp"
 
-class MainWindow : public QMainWindow
+class MainWindow : public QFrame
 {
     Q_OBJECT
 
 public:
     explicit MainWindow(QWidget *parent = nullptr)
-        : QMainWindow(parent), m_searchWidget(nullptr), m_tableView(nullptr),
-          m_refreshTimer(new QTimer(this)), m_centralWidget(nullptr), m_mainLayout(nullptr),
-          m_titleBar(nullptr), m_closeButton(nullptr), m_themeToggleButton(nullptr),
-          m_resizeGrip(nullptr), m_dragging(false), m_trayIcon(nullptr), m_trayMenu(nullptr),
-          m_isDarkTheme(false), m_refreshInterval(5000), m_windowOpacity(1.0),
-          m_saveSettingsTimer(new QTimer(this))
+        : QFrame(parent)
+        , config_(std::make_shared<StockConfig>())
+        , titleBar_(new QWidget(this))
+        , searchBox_(new QLineEdit(this))
+        , btns_({
+              createTitleBarButton(":/%1/theme-toggle.svg", "Switch Theme", &MainWindow::toggleTheme),
+              createTitleBarButton(":/%1/close-button.svg", "Close", &MainWindow::onCloseButtonClicked),
+          })
+        , table_(new StockTableView(this))
+        , m_refreshTimer(new QTimer(this))
+        , m_dragging(false)
+        , m_refreshInterval(5000)
+        , m_saveSettingsTimer(new QTimer(this))
     {
-        setupUI();
-        loadUISettings(); // Load settings before setupTimer to use correct refresh interval
-        setupTimer();
+        setupUi();
         setupGlobalShortcut();
         setupSystemTray();
+        applyTheme();
+        // loadUISettings();  // Load settings before setupTimer to use correct refresh interval
+        // setupTimer();
 
         // Setup settings save timer (single shot, 500ms delay)
-        m_saveSettingsTimer->setSingleShot(true);
-        m_saveSettingsTimer->setInterval(500);
-        connect(m_saveSettingsTimer, &QTimer::timeout, this, &MainWindow::saveUISettings);
+        // m_saveSettingsTimer->setSingleShot(true);
+        // m_saveSettingsTimer->setInterval(500);
+        // connect(m_saveSettingsTimer, &QTimer::timeout, this, &MainWindow::saveUISettings);
 
-        // Install event filter to capture wheel events from child widgets
-        installEventFilter(this);
+        // // Install event filter to capture wheel events from child widgets
+        // installEventFilter(this);
 
-        // Also install event filter on child widgets
-        if (m_searchWidget)
-        {
-            m_searchWidget->installEventFilter(this);
-        }
-        if (m_tableView)
-        {
-            m_tableView->installEventFilter(this);
-        }
-        if (m_centralWidget)
-        {
-            m_centralWidget->installEventFilter(this);
-        }
+        // // Also install event filter on child widgets
+        // if (searchBox_)
+        // {
+        //     searchBox_->installEventFilter(this);
+        // }
+        // if (table_)
+        // {
+        //     table_->installEventFilter(this);
+        // }
+        // if (m_centralWidget)
+        // {
+        //     m_centralWidget->installEventFilter(this);
+        // }
 
-        // Connect API service signals
-        connect(&StockApiService::instance(), &StockApiService::stockInfoReceived,
-                this, &MainWindow::onStockInfoReceived);
-        connect(&StockApiService::instance(), &StockApiService::stockInfosReceived,
-                this, &MainWindow::onStockInfosReceived);
-        connect(&StockApiService::instance(), &StockApiService::errorOccurred,
-                this, &MainWindow::onApiError);
+        // // Connect API service signals
 
-        loadStockList();
+        // connect(&StockApiService::instance(), &StockApiService::stockInfosReceived, this, &MainWindow::onStockInfosReceived);
+        // connect(&StockApiService::instance(), &StockApiService::errorOccurred, this, &MainWindow::onApiError);
+
+        // StockApiService::instance().setApiSource(ConfigManager::instance().getConfig().apiSource);
+        // loadStockList();
     }
 
     ~MainWindow()
@@ -100,7 +104,6 @@ public:
         saveStockList();
 
 #ifdef Q_OS_WIN
-        // Unregister global hotkey
         UnregisterHotKey((HWND)winId(), 1);
 #endif
     }
@@ -108,7 +111,7 @@ public:
 protected:
     void mousePressEvent(QMouseEvent *event) override
     {
-        if (event->button() == Qt::LeftButton && m_titleBar && m_titleBar->geometry().contains(event->pos()))
+        if (event->button() == Qt::LeftButton && titleBar_ && titleBar_->geometry().contains(event->pos()))
         {
             m_dragging = true;
             m_dragPosition = event->globalPos() - frameGeometry().topLeft();
@@ -134,26 +137,16 @@ protected:
         }
     }
 
-    void wheelEvent(QWheelEvent *event) override
-    {
-        // Transparency control is now handled in eventFilter
-        // Pass the event to the parent
-        QMainWindow::wheelEvent(event);
-    }
-
     void keyPressEvent(QKeyEvent *event) override
     {
         if (event->key() == Qt::Key_Escape)
         {
-            // Hide window when ESC is pressed
             hide();
-            Logger::info("Window hidden via ESC key");
             event->accept();
         }
         else
         {
-            // Pass the event to the parent for other keys
-            QMainWindow::keyPressEvent(event);
+            QWidget::keyPressEvent(event);
         }
     }
 
@@ -165,103 +158,80 @@ protected:
             MSG *msg = static_cast<MSG *>(message);
             if (msg->message == WM_HOTKEY)
             {
-                if (msg->wParam == 1) // Our hotkey ID
+                if (msg->wParam == 1)  // Our hotkey ID
                 {
                     toggleWindowVisibility();
                     return true;
                 }
             }
         }
-        return QMainWindow::nativeEvent(eventType, message, result);
+        return QWidget::nativeEvent(eventType, message, result);
     }
 #endif
 
-    bool eventFilter(QObject *obj, QEvent *event) override
+    void wheelEvent(QWheelEvent *event) override
     {
-        // Capture wheel events from child widgets when Alt is pressed
-        if (event->type() == QEvent::Wheel)
+        if (event->modifiers() & Qt::AltModifier)
         {
-            QWheelEvent *wheelEvent = static_cast<QWheelEvent *>(event);
+            // Handle transparency control
+            qreal currentOpacity = windowOpacity();
 
-            if (wheelEvent->modifiers() & Qt::AltModifier)
+            // Try multiple ways to get wheel direction
+            int wheelDeltaY = event->angleDelta().y();
+            int wheelDeltaX = event->angleDelta().x();
+            int pixelDeltaY = event->pixelDelta().y();
+            int pixelDeltaX = event->pixelDelta().x();
+
+            // Determine effective wheel direction
+            int effectiveDelta = 0;
+            if (wheelDeltaY != 0)
             {
-                // Handle transparency control
-                qreal currentOpacity = windowOpacity();
+                effectiveDelta = wheelDeltaY;
+            }
+            else if (pixelDeltaY != 0)
+            {
+                effectiveDelta = pixelDeltaY;
+            }
+            else if (wheelDeltaX != 0)
+            {
+                effectiveDelta = wheelDeltaX;
+            }
+            else if (pixelDeltaX != 0)
+            {
+                effectiveDelta = pixelDeltaX;
+            }
+            else
+            {
+                // If all wheel data is 0, use a simple toggle approach
+                // This is a fallback for when wheel data is lost
+                static bool lastDirection = true;  // true = increase opacity
+                effectiveDelta = lastDirection ? 120 : -120;
+                lastDirection = !lastDirection;  // Toggle for next time
+            }
 
-                // Try multiple ways to get wheel direction
-                int wheelDeltaY = wheelEvent->angleDelta().y();
-                int wheelDeltaX = wheelEvent->angleDelta().x();
-                int pixelDeltaY = wheelEvent->pixelDelta().y();
-                int pixelDeltaX = wheelEvent->pixelDelta().x();
+            // Up scroll (positive delta) = more opaque (less transparent)
+            // Down scroll (negative delta) = more transparent
+            qreal delta = effectiveDelta > 0 ? 0.05 : -0.05;
+            qreal newOpacity = qBound(0.3, currentOpacity + delta, 1.0);
 
-                // Determine effective wheel direction
-                int effectiveDelta = 0;
-                if (wheelDeltaY != 0)
-                {
-                    effectiveDelta = wheelDeltaY;
-                }
-                else if (pixelDeltaY != 0)
-                {
-                    effectiveDelta = pixelDeltaY;
-                }
-                else if (wheelDeltaX != 0)
-                {
-                    effectiveDelta = wheelDeltaX;
-                }
-                else if (pixelDeltaX != 0)
-                {
-                    effectiveDelta = pixelDeltaX;
-                }
-                else
-                {
-                    // If all wheel data is 0, use a simple toggle approach
-                    // This is a fallback for when wheel data is lost
-                    static bool lastDirection = true; // true = increase opacity
-                    effectiveDelta = lastDirection ? 120 : -120;
-                    lastDirection = !lastDirection; // Toggle for next time
-                }
+            // Only update if opacity actually changed
+            if (qAbs(newOpacity - currentOpacity) > 0.001)
+            {
+                setWindowOpacity(newOpacity);
+                config_->windowOpacity = newOpacity;
 
-                // Up scroll (positive delta) = more opaque (less transparent)
-                // Down scroll (negative delta) = more transparent
-                qreal delta = effectiveDelta > 0 ? 0.05 : -0.05;
-                qreal newOpacity = qBound(0.3, currentOpacity + delta, 1.0);
-
-                // Only update if opacity actually changed
-                if (qAbs(newOpacity - currentOpacity) > 0.001)
-                {
-                    setWindowOpacity(newOpacity);
-                    m_windowOpacity = newOpacity;
-
-                    // Use timer to delay saving settings (throttling)
-                    m_saveSettingsTimer->start();
-                }
-                return true; // Event handled
+                // Use timer to delay saving settings (throttling)
+                m_saveSettingsTimer->start();
             }
         }
-
-        return QMainWindow::eventFilter(obj, event);
     }
 
-    void resizeEvent(QResizeEvent *event) override
+private:
+    StockInfo createEmptyStockInfo(const QString &code, const QString &name = QString())
     {
-        QMainWindow::resizeEvent(event);
-
-        // Update resize grip position when window is resized
-        if (m_resizeGrip)
-        {
-            m_resizeGrip->move(width() - m_resizeGrip->width(), height() - m_resizeGrip->height());
-        }
-    }
-
-private slots:
-    void onStockSelected(const StockSearchResult &result)
-    {
-        Logger::info(QString("MainWindow::onStockSelected - Stock selected: %1 - %2").arg(result.code(), result.name()));
-
-        // Create StockInfo from search result
         StockInfo stockInfo;
-        stockInfo.setCode(result.code());
-        stockInfo.setName(result.name());
+        stockInfo.setCode(code);
+        stockInfo.setName(name.isEmpty() ? code : name);
         stockInfo.setLastUpdate(QDateTime::currentDateTime());
 
         // Initialize price data to 0, will be updated by timer
@@ -272,13 +242,31 @@ private slots:
         stockInfo.setHigh(0.0);
         stockInfo.setLow(0.0);
 
-        // Add to table
-        m_tableView->addStock(stockInfo);
-        saveStockList();
+        return stockInfo;
+    }
 
-        // Immediately request price update for the new stock
+    void updateSearchWidgetExistingStocks()
+    {
+        if (searchBox_ && table_)
+        {
+            QStringList stockCodes;
+            QList<StockInfo> stocks = table_->stockData();
+            for (const StockInfo &stock : stocks)
+            {
+                stockCodes.append(stock.code());
+            }
+            // searchBox_->setExistingStocks(stockCodes);
+        }
+    }
+
+private slots:
+    void onStockSelected(const StockSearchResult &result)
+    {
+        StockInfo stockInfo = createEmptyStockInfo(result.code(), result.name());
+        table_->addStock(stockInfo);
+        saveStockList();
+        updateSearchWidgetExistingStocks();
         requestStockPrices();
-        Logger::info(QString("Triggered immediate price update after adding stock: %1").arg(result.code()));
     }
 
     void onStockInfoReceived(const StockInfo &stockInfo)
@@ -288,7 +276,6 @@ private slots:
 
     void onStockInfosReceived(const QList<StockInfo> &stockInfos)
     {
-        Logger::info(QString("Received price data for %1 stocks, triggering table refresh").arg(stockInfos.size()));
 
         // Update stock data with API names (don't preserve original names if they are just codes)
         QList<StockInfo> updatedStocks;
@@ -297,7 +284,7 @@ private slots:
             StockInfo stock = newStock;
 
             // Only preserve original name if it's different from the code (i.e., it's a real name)
-            for (const StockInfo &originalStock : m_tableView->stockData())
+            for (const StockInfo &originalStock : table_->stockData())
             {
                 if (originalStock.code() == newStock.code())
                 {
@@ -315,9 +302,7 @@ private slots:
         }
 
         // Update table data - this will trigger automatic table refresh via dataChanged signal
-        m_tableView->updateStockData(updatedStocks);
-
-        Logger::info(QString("Table data updated and refreshed for %1 stocks").arg(stockInfos.size()));
+        table_->updateStockData(updatedStocks);
     }
 
     void onRefreshTimer()
@@ -327,7 +312,7 @@ private slots:
 
     void requestStockPrices()
     {
-        QList<StockInfo> stockData = m_tableView->stockData();
+        QList<StockInfo> stockData = table_->stockData();
         if (!stockData.isEmpty())
         {
             QStringList codes;
@@ -336,8 +321,7 @@ private slots:
                 codes.append(stock.code());
             }
 
-            StockApiService::instance().getStockInfosAsync(codes);
-            Logger::info(QString("Requesting real-time prices for %1 stocks").arg(codes.size()));
+            // StockApiService::instance().getStockInfosAsync(codes);
         }
     }
 
@@ -347,8 +331,7 @@ private slots:
         // Show error message for critical errors
         if (error.contains("network", Qt::CaseInsensitive))
         {
-            QMessageBox::warning(this, "Network Error",
-                                 QString("Network request failed: %1\nPlease check your network connection.").arg(error));
+            QMessageBox::warning(this, "Network Error", QString("Network request failed: %1\nPlease check your network connection.").arg(error));
         }
     }
 
@@ -358,225 +341,121 @@ private slots:
         if (QApplication::keyboardModifiers() & Qt::AltModifier)
         {
             // Alt+Click: Exit application directly
-            Logger::info("Alt+Click detected on close button - exiting application");
             QApplication::quit();
         }
         else
         {
             // Normal click: Hide to system tray instead of quitting
             hide();
-            if (m_trayIcon && m_trayIcon->isVisible())
-            {
-                Logger::info("Window hidden to system tray");
-            }
         }
     }
 
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
     {
-        if (reason == QSystemTrayIcon::Trigger) // Left click
+        if (reason == QSystemTrayIcon::Trigger)  // Left click
         {
             if (isVisible() && !isMinimized())
             {
                 hide();
-                Logger::info("Window hidden via tray icon click");
             }
             else
             {
                 show();
                 raise();
                 activateWindow();
-                Logger::info("Window shown via tray icon click");
             }
         }
     }
 
     void onTrayMenuExit()
     {
-        Logger::info("Application exit requested from tray menu");
         QApplication::quit();
     }
 
-    void onThemeToggleClicked()
-    {
-        m_isDarkTheme = !m_isDarkTheme;
-        applyTheme();
-        saveThemePreference();
-        updateThemeButtonIcon();
-        updateCloseButtonIcon();
-    }
-
 private:
-    void setupUI()
+    template <class F>
+    auto createTitleBarButton(const QString &iconPath, const QString &tooltip, F &&func)
     {
-        // Make window frameless
-        setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
-        setWindowTitle("Stock Monitor");
-
-        // Set window icon for taskbar only (not window title bar)
-        QIcon windowIcon(":/app-icon.svg");
-        if (windowIcon.isNull())
-        {
-            windowIcon = QIcon(":/app-icon-256.svg");
-        }
-        if (!windowIcon.isNull())
-        {
-            // Only set for taskbar, not for window title bar
-            setWindowIcon(windowIcon);
-        }
-
-        // Remove window icon from title bar for frameless window
-        setWindowFlag(Qt::WindowSystemMenuHint, false);
-
-        m_centralWidget = new QWidget(this);
-        m_centralWidget->setObjectName("mainWindow");
-        setCentralWidget(m_centralWidget);
-
-        m_mainLayout = new QVBoxLayout(m_centralWidget);
-        m_mainLayout->setContentsMargins(2, 2, 2, 2);
-        m_mainLayout->setSpacing(0);
-
-        // Create custom title bar
-        setupTitleBar();
-
-        // Create content area
-        QWidget *contentWidget = new QWidget();
-        QVBoxLayout *contentLayout = new QVBoxLayout(contentWidget);
-        contentLayout->setContentsMargins(5, 5, 5, 5);
-        contentLayout->setSpacing(10);
-
-        // Create table view
-        m_tableView = new StockTableView(this);
-        connect(m_tableView, &StockTableView::stockListChanged,
-                this, &MainWindow::saveStockList);
-
-        // Add table view to content layout
-        contentLayout->addWidget(m_tableView);
-
-        m_mainLayout->addWidget(m_titleBar);
-        m_mainLayout->addWidget(contentWidget);
-
-        // Add resize grip in the bottom-right corner
-        setupResizeGrip();
+        auto btn = new QPushButton(this);
+        btn->setProperty("iconpath", iconPath);
+        btn->setFixedSize(30, 30);
+        btn->setToolTip(tooltip);
+        connect(btn, &QPushButton::clicked, this, func);
+        return btn;
     }
 
-    void setupTitleBar()
+    void setupUi()
     {
-        m_titleBar = new QWidget();
-        m_titleBar->setFixedHeight(40);
-        m_titleBar->setObjectName("titleBar");
+        setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+        setWindowFlag(Qt::WindowSystemMenuHint, false);
+        setWindowTitle("Stock Monitor");
+        setWindowIcon(QIcon(":/app-icon.svg"));
+        setMinimumSize(260, 360);
 
-        // Create search widget for title bar
-        m_searchWidget = new StockSearchWidget(this);
-        connect(m_searchWidget, &StockSearchWidget::stockSelected,
-                this, &MainWindow::onStockSelected);
-        connect(m_searchWidget, &StockSearchWidget::escapePressed,
-                this, [this]()
-                { hide(); Logger::info("Window hidden via ESC key from search widget"); });
-
-        // Create theme toggle button
-        m_themeToggleButton = new QPushButton();
-        m_themeToggleButton->setFixedSize(30, 30);
-        m_themeToggleButton->setObjectName("themeToggleButton");
-        m_themeToggleButton->setToolTip("Switch Theme");
-        updateThemeButtonIcon(); // Set initial icon
-        connect(m_themeToggleButton, &QPushButton::clicked, this, &MainWindow::onThemeToggleClicked);
-
-        // Create close button
-        m_closeButton = new QPushButton();
-        m_closeButton->setFixedSize(30, 30);
-        m_closeButton->setObjectName("closeButton");
-        m_closeButton->setToolTip("Close");
-        updateCloseButtonIcon(); // Set initial icon
-        connect(m_closeButton, &QPushButton::clicked, this, &MainWindow::onCloseButtonClicked);
-
-        QHBoxLayout *titleLayout = new QHBoxLayout(m_titleBar);
+        titleBar_->setFixedHeight(40);
+        titleBar_->setObjectName("titleBar");
+        QHBoxLayout *titleLayout = new QHBoxLayout(titleBar_);
         titleLayout->setContentsMargins(5, 5, 5, 5);
         titleLayout->setSpacing(0);
-        titleLayout->addWidget(m_searchWidget, 1);
+        titleLayout->addWidget(searchBox_, 1);
         titleLayout->addSpacing(20);
-        titleLayout->addWidget(m_themeToggleButton);
-        titleLayout->addWidget(m_closeButton);
-    }
+        titleLayout->addWidget(btns_[0]);
+        titleLayout->addWidget(btns_[1]);
 
-    void setupResizeGrip()
-    {
-        // Create resize grip for bottom-right corner
-        m_resizeGrip = new QSizeGrip(this);
-        m_resizeGrip->setFixedSize(16, 16);
+        // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::saveStockList);
+        // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::updateSearchWidgetExistingStocks);
+        auto wrap = new QVBoxLayout;
+        wrap->setContentsMargins(5, 5, 5, 5);
+        wrap->addWidget(table_, 1);
 
-        // Position the resize grip in the bottom-right corner
-        m_resizeGrip->move(width() - m_resizeGrip->width(), height() - m_resizeGrip->height());
+        auto statusBar = new QStatusBar(this);
 
-        // Make sure resize grip stays on top
-        m_resizeGrip->raise();
+        auto layout = new QVBoxLayout(this);
+        layout->setContentsMargins(2, 2, 2, 2);
+        layout->setSpacing(5);
+        layout->addWidget(titleBar_);
+        layout->addLayout(wrap, 1);
+        layout->addWidget(statusBar);
+
+        setWindowOpacity(config_->windowOpacity);
     }
 
     void setupTimer()
     {
         m_refreshTimer->setInterval(m_refreshInterval);
         connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::onRefreshTimer);
-        m_refreshTimer->start();
+
+        QTimer::singleShot(1000, this, [this]() {
+            m_refreshTimer->start();
+        });
     }
 
     void setupGlobalShortcut()
     {
 #ifdef Q_OS_WIN
-        // Load hotkey configuration from settings
-        QString exeDir = QApplication::applicationDirPath();
-        QString iniFile = exeDir + "/stocks.ini";
 
-        QSettings settings(iniFile, QSettings::IniFormat);
-
-        // Default hotkey: Ctrl+Alt+S
-        QString keyString = settings.value("Hotkey/Key", "Ctrl+Alt+S").toString();
-
-        // Save default value if not exist
-        if (!settings.contains("Hotkey/Key"))
-        {
-            settings.setValue("Hotkey/Key", keyString);
-            settings.sync();
-        }
-
-        // Parse hotkey string (case insensitive)
-        QString lowerKey = keyString.toLower();
-        bool useCtrl = lowerKey.contains("ctrl");
-        bool useAlt = lowerKey.contains("alt");
-        bool useShift = lowerKey.contains("shift");
-
-        // Extract the key character (last part after '+')
-        QStringList parts = keyString.split('+');
-        QString keyChar = parts.isEmpty() ? "S" : parts.last().trimmed().toUpper();
+        auto lowerKey = config_->hotkeyKey.toLower();
+        QString keyChar = lowerKey.split('+', Qt::SkipEmptyParts).last();
         if (keyChar.length() > 1)
         {
-            keyChar = keyChar.left(1); // Take only first character
+            keyChar = keyChar.left(1);  // Take only first character
         }
 
         UINT modifiers = 0;
-        if (useCtrl)
-            modifiers |= MOD_CONTROL;
-        if (useAlt)
-            modifiers |= MOD_ALT;
-        if (useShift)
-            modifiers |= MOD_SHIFT;
+        if (lowerKey.contains("ctrl")) modifiers |= MOD_CONTROL;
+        if (lowerKey.contains("alt")) modifiers |= MOD_ALT;
+        if (lowerKey.contains("shift")) modifiers |= MOD_SHIFT;
 
         UINT vkCode = keyChar.isEmpty() ? 'S' : keyChar.at(0).toLatin1();
-
         if (!RegisterHotKey((HWND)winId(), 1, modifiers, vkCode))
         {
-            Logger::error(QString("Failed to register global hotkey %1").arg(keyString));
-        }
-        else
-        {
-            Logger::info(QString("Global hotkey %1 registered successfully").arg(keyString));
+            Logger::error(QString("Failed to register global hotkey %1").arg(lowerKey));
         }
 #endif
     }
 
     void setupSystemTray()
     {
-        Logger::info("Setting up system tray...");
-
         // Check if system tray is available
         if (!QSystemTrayIcon::isSystemTrayAvailable())
         {
@@ -584,290 +463,118 @@ private:
             return;
         }
 
-        Logger::info("System tray is available");
-
-        // Create tray icon
-        m_trayIcon = new QSystemTrayIcon(this);
-
-        // Set icon from resources
-        QIcon icon(":/app-icon.svg");
-        if (icon.isNull())
-        {
-            // Try 256px fallback
-            icon = QIcon(":/app-icon-256.svg");
-        }
-        if (icon.isNull())
-        {
-            // Create a simple fallback icon if resource not found
-            QPixmap pixmap(16, 16);
-            pixmap.fill(Qt::green);
-            QPainter painter(&pixmap);
-            painter.setPen(Qt::white);
-            painter.drawText(pixmap.rect(), Qt::AlignCenter, "$");
-            icon = QIcon(pixmap);
-            Logger::error("Using fallback icon for system tray");
-        }
-        m_trayIcon->setIcon(icon);
-        m_trayIcon->setToolTip("Stock Monitor");
-
-        // Create tray menu
-        m_trayMenu = new QMenu(this);
-
+        auto menu = new QMenu(this);
         QAction *exitAction = new QAction("Exit", this);
+        menu->addAction(exitAction);
         connect(exitAction, &QAction::triggered, this, &MainWindow::onTrayMenuExit);
-        m_trayMenu->addAction(exitAction);
 
-        m_trayIcon->setContextMenu(m_trayMenu);
+        auto tray = new QSystemTrayIcon(this);
+        tray->setIcon(windowIcon());
+        tray->setToolTip(windowTitle());
+        tray->setContextMenu(menu);
+        tray->show();
 
-        // Connect tray icon signals
-        connect(m_trayIcon, &QSystemTrayIcon::activated,
-                this, &MainWindow::onTrayIconActivated);
-
-        // Show tray icon
-        m_trayIcon->show();
-        Logger::info("System tray icon initialized and shown");
+        connect(tray, &QSystemTrayIcon::activated, this, &MainWindow::onTrayIconActivated);
     }
 
     void toggleWindowVisibility()
     {
         if (isVisible() && !isMinimized())
         {
-            // Hide window
             hide();
-            Logger::info("Window hidden via global hotkey");
         }
         else
         {
-            // Show and activate window
             show();
             raise();
             activateWindow();
-            Logger::info("Window shown via global hotkey");
         }
     }
 
     void saveStockList()
     {
-        // Save INI file in exe directory
-        QString exeDir = QApplication::applicationDirPath();
-        QString iniFile = exeDir + "/stocks.ini";
+        // QStringList stockCodes;
+        // QList<StockInfo> stockData = table_->stockData();
+        // for (const StockInfo &stock : stockData)
+        // {
+        //     stockCodes.append(stock.code());
+        // }
 
-        QSettings settings(iniFile, QSettings::IniFormat);
-        QStringList stockCodes;
-
-        QList<StockInfo> stockData = m_tableView->stockData();
-        for (const StockInfo &stock : stockData)
-        {
-            stockCodes.append(stock.code());
-        }
-
-        // Save as comma-separated string to avoid @Invalid() when empty
-        QString stockCodesString = stockCodes.isEmpty() ? QString("") : stockCodes.join(", ");
-        settings.setValue("StockList/StockCodes", stockCodesString);
-        settings.sync();
-        Logger::info(QString("Saved %1 stock codes to %2").arg(stockCodes.size()).arg(iniFile));
+        // // 使用 ConfigManager 保存股票列表
+        // ConfigManager::instance().setStockCodes(stockCodes);
     }
 
     void loadStockList()
     {
-        // Load INI file from exe directory
-        QString exeDir = QApplication::applicationDirPath();
-        QString iniFile = exeDir + "/stocks.ini";
+        // // 使用 ConfigManager 加载股票列表
+        // QStringList stockCodes = ConfigManager::instance().getConfig().stockCodes;
 
-        QSettings settings(iniFile, QSettings::IniFormat);
+        // if (stockCodes.isEmpty())
+        // {
+        //     requestStockPrices();
+        //     return;
+        // }
 
-        // Load as string and split by comma to handle both old and new formats
-        QString stockCodesString = settings.value("StockList/StockCodes").toString();
-        QStringList stockCodes;
+        // for (const QString &code : stockCodes)
+        // {
+        //     QString trimmedCode = code.trimmed();
+        //     if (trimmedCode.isEmpty()) continue;
 
-        if (!stockCodesString.isEmpty())
+        //     StockInfo stockInfo = createEmptyStockInfo(trimmedCode);
+        //     table_->addStock(stockInfo);
+        // }
+
+        // updateSearchWidgetExistingStocks();
+        // requestStockPrices();
+    }
+
+    void toggleTheme()
+    {
+        auto btn = sender();
+        auto index = btn->property("index").toInt();
+        auto next = (index + 1) % config_->availableThemes.size();
+        btn->setProperty("index", next);
+        applyTheme(config_->availableThemes.value(next));
+    }
+
+    void applyTheme(const QString &theme = "")
+    {
+        if (!theme.isEmpty()) config_->theme = theme;
+
+        updateButtonIcons();
+
+        QStringList css;
+        for (auto &&path : QStringList{ ":/base.css", QString(":/%1/style.css").arg(config_->theme) })
         {
-            stockCodes = stockCodesString.split(",", Qt::SkipEmptyParts);
-            // Trim whitespace from each code
-            for (QString &code : stockCodes)
+            QFile f(path);
+            if (f.open(QFile::ReadOnly | QFile::Text))
             {
-                code = code.trimmed();
+                css << f.readAll();
             }
-        }
+        };
 
-        if (stockCodes.isEmpty())
-        {
-            // If no saved stocks, add sample stocks
-            Logger::info(QString("No saved stocks found, added sample stocks. Config file: %1").arg(iniFile));
-            // Immediately request price data for sample stocks
-            requestStockPrices();
-            return;
-        }
-
-        for (const QString &code : stockCodes)
-        {
-            QString trimmedCode = code.trimmed(); // Remove any whitespace
-            if (trimmedCode.isEmpty())
-                continue;
-
-            StockInfo stockInfo;
-            stockInfo.setCode(trimmedCode);
-            stockInfo.setName(trimmedCode); // Will be updated when data is fetched
-            stockInfo.setLastUpdate(QDateTime::currentDateTime());
-
-            // Initialize price data to 0, will be updated by timer
-            stockInfo.setCurrentPrice(0.0);
-            stockInfo.setYesterday(0.0);
-            stockInfo.setChange(0.0);
-            stockInfo.setChangePercent(0.0);
-            stockInfo.setHigh(0.0);
-            stockInfo.setLow(0.0);
-
-            m_tableView->addStock(stockInfo);
-        }
-
-        Logger::info(QString("Loaded %1 stock codes from %2").arg(stockCodes.size()).arg(iniFile));
-
-        // Immediately request price data after loading stocks
-        requestStockPrices();
+        style()->unpolish(this);
+        setStyleSheet(css.join("\n"));
+        style()->polish(this);
     }
 
-    void applyTheme()
+    void updateButtonIcons()
     {
-        QString baseStyleSheet;
-        QString themeStyleSheet;
-
-        // Load base styles
-        QFile baseFile(":/base.css");
-        if (baseFile.open(QFile::ReadOnly | QFile::Text))
+        for (auto &btn : btns_)
         {
-            QTextStream stream(&baseFile);
-            baseStyleSheet = stream.readAll();
-        }
-        else
-        {
-            Logger::error("Failed to load base.css");
-        }
-
-        // Load theme-specific styles
-        QString themeFile = m_isDarkTheme ? ":/dark.css" : ":/light.css";
-        QFile file(themeFile);
-        if (file.open(QFile::ReadOnly | QFile::Text))
-        {
-            QTextStream stream(&file);
-            themeStyleSheet = stream.readAll();
-        }
-        else
-        {
-            Logger::error(QString("Failed to load theme file: %1").arg(themeFile));
-        }
-
-        // Combine base and theme styles
-        QString combinedStyleSheet = baseStyleSheet + "\n" + themeStyleSheet;
-        qApp->setStyleSheet(combinedStyleSheet);
-        Logger::info(QString("Applied theme: %1").arg(m_isDarkTheme ? "Dark" : "Light"));
-    }
-
-    void saveUISettings()
-    {
-        QString exeDir = QApplication::applicationDirPath();
-        QString iniFile = exeDir + "/stocks.ini";
-
-        QSettings settings(iniFile, QSettings::IniFormat);
-
-        // Save theme
-        QString themeValue = m_isDarkTheme ? "dark" : "light";
-        settings.setValue("UI/Theme", themeValue);
-
-        // Save window opacity (rounded to 2 decimal places)
-        settings.setValue("UI/WindowOpacity", QString::number(m_windowOpacity, 'f', 2));
-
-        // Save refresh interval
-        settings.setValue("UI/RefreshInterval", m_refreshInterval);
-
-        settings.sync();
-        Logger::info(QString("Saved UI settings: Theme=%1, Opacity=%2, RefreshInterval=%3ms")
-                         .arg(themeValue)
-                         .arg(m_windowOpacity, 0, 'f', 2)
-                         .arg(m_refreshInterval));
-    }
-
-    void saveThemePreference()
-    {
-        saveUISettings();
-    }
-
-    void scheduleSettingsSave()
-    {
-        // Restart the timer to delay saving (throttling mechanism)
-        m_saveSettingsTimer->start();
-    }
-
-    void loadUISettings()
-    {
-        QString exeDir = QApplication::applicationDirPath();
-        QString iniFile = exeDir + "/stocks.ini";
-
-        QSettings settings(iniFile, QSettings::IniFormat);
-
-        // Load theme
-        QString themeValue = settings.value("UI/Theme", "light").toString().toLower();
-        m_isDarkTheme = (themeValue == "dark");
-
-        // Load window opacity
-        m_windowOpacity = settings.value("UI/WindowOpacity", 1.0).toReal();
-        m_windowOpacity = qBound(0.3, m_windowOpacity, 1.0); // Ensure valid range
-        setWindowOpacity(m_windowOpacity);
-
-        // Load refresh interval
-        m_refreshInterval = settings.value("UI/RefreshInterval", 5000).toInt();
-        m_refreshInterval = qMax(1000, m_refreshInterval); // Minimum 1 second
-
-        applyTheme();
-        updateThemeButtonIcon();
-        updateCloseButtonIcon();
-
-        Logger::info(QString("Loaded UI settings: Theme=%1, Opacity=%2, RefreshInterval=%3ms")
-                         .arg(themeValue)
-                         .arg(m_windowOpacity, 0, 'f', 2)
-                         .arg(m_refreshInterval));
-    }
-
-    void loadThemePreference()
-    {
-        loadUISettings();
-    }
-
-    void updateThemeButtonIcon()
-    {
-        if (m_themeToggleButton)
-        {
-            QString iconPath = m_isDarkTheme ? ":/theme-toggle-light.svg" : ":/theme-toggle.svg";
-
-            QIcon themeIcon(iconPath);
-            m_themeToggleButton->setIcon(themeIcon);
-            m_themeToggleButton->setIconSize(QSize(16, 16));
-            m_themeToggleButton->setToolTip(m_isDarkTheme ? "Switch to Light Theme" : "Switch to Dark Theme");
+            btn->setIconSize(QSize(16, 16));
+            btn->setIcon(QIcon(btn->property("iconpath").toString().arg(config_->theme)));
         }
     }
 
-    void updateCloseButtonIcon()
-    {
-        if (m_closeButton)
-        {
-            QString iconPath = m_isDarkTheme ? ":/close-button-light.svg" : ":/close-button.svg";
-            QIcon closeIcon(iconPath);
-            m_closeButton->setIcon(closeIcon);
-            m_closeButton->setIconSize(QSize(16, 16));
-        }
-    }
+private:
+    std::shared_ptr<StockConfig> config_;
 
-    // UI Components
-    QWidget *m_centralWidget;
-    QVBoxLayout *m_mainLayout;
-    QWidget *m_titleBar;
-    QPushButton *m_closeButton;
-    QPushButton *m_themeToggleButton;
-    QSizeGrip *m_resizeGrip;
+    QWidget *titleBar_;
+    QLineEdit *searchBox_;
+    QList<QPushButton *> btns_;
+    StockTableView *table_;
 
-    // Main widgets
-    StockSearchWidget *m_searchWidget;
-    StockTableView *m_tableView;
     QTimer *m_refreshTimer;
 
     // Window dragging
@@ -875,18 +582,8 @@ private:
     QPoint m_dragPosition;
 
     // System tray
-    QSystemTrayIcon *m_trayIcon;
-    QMenu *m_trayMenu;
-
-    // Theme
-    bool m_isDarkTheme;
-
-    // UI Settings
     int m_refreshInterval;
-    qreal m_windowOpacity;
 
     // Event throttling
     QTimer *m_saveSettingsTimer;
 };
-
-#endif // MAINWINDOW_HPP

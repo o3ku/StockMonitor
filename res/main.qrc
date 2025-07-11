@@ -1,13 +1,15 @@
 ﻿<RCC>
     <qresource prefix="/">
         <file>base.css</file>
-        <file>light.css</file>
-        <file>dark.css</file>
         <file>app-icon.svg</file>
         <file>app-icon-256.svg</file>
-        <file>close-button.svg</file>
-        <file>close-button-light.svg</file>
-        <file>theme-toggle.svg</file>
-        <file>theme-toggle-light.svg</file>
+
+        <file>light/style.css</file>
+        <file>light/close-button.svg</file>
+        <file>light/theme-toggle.svg</file>
+
+        <file>dark/style.css</file>
+        <file>dark/close-button.svg</file>
+        <file>dark/theme-toggle.svg</file>
     </qresource>
 </RCC>
