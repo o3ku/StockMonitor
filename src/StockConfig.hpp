@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StockInfo.hpp"
 #include <QApplication>
 #include <QColor>
 #include <QDebug>
@@ -19,6 +20,7 @@ struct StockConfig
     int refreshInterval{ 5000 };
 
     QStringList availableThemes{ "light", "dark" };
+    QMap<QString, StockInfo> stocks;
 
     StockConfig()
         : filepath_(QString("%1/stocks.ini").arg(QApplication::applicationDirPath()))

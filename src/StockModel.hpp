@@ -38,7 +38,7 @@ public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override
     {
         Q_UNUSED(parent)
-        return m_stockCodes.size();
+        return config_->stockCodes.size();
     }
 
     int columnCount(const QModelIndex &parent = QModelIndex()) const override
@@ -49,12 +49,12 @@ public:
 
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
     {
-        if (!index.isValid() || index.row() >= m_stockCodes.size()) return QVariant();
+        if (!index.isValid() || index.row() >= config_->stockCodes.size()) return QVariant();
 
-        const QString &code = m_stockCodes.at(index.row());
-        if (!m_stockData.contains(code)) return QVariant();
+        const QString &code = config_->stockCodes.at(index.row());
+        if (!config_->stocks.contains(code)) return QVariant();
 
-        const StockInfo &stock = m_stockData.value(code);
+        const StockInfo &stock = config_->stocks.value(code);
 
         switch (role)
         {
@@ -192,7 +192,7 @@ public:
         if (sourceRows.size() == 1)
         {
             int sourceRow = sourceRows.first();
-            if (sourceRow >= 0 && sourceRow < m_stockCodes.size() && beginRow >= 0 && beginRow <= m_stockCodes.size())
+            if (sourceRow >= 0 && sourceRow < config_->stockCodes.size() && beginRow >= 0 && beginRow <= config_->stockCodes.size())
             {
                 moveStock(sourceRow, beginRow);
                 return true;
@@ -206,14 +206,14 @@ public:
     void addStock(const StockInfo &stock)
     {
         // Check if stock already exists
-        if (m_stockData.contains(stock.code()))
+        if (config_->stocks.contains(stock.code()))
         {
             return;
         }
 
-        beginInsertRows(QModelIndex(), m_stockCodes.size(), m_stockCodes.size());
-        m_stockCodes.append(stock.code());
-        m_stockData.insert(stock.code(), stock);
+        beginInsertRows(QModelIndex(), config_->stockCodes.size(), config_->stockCodes.size());
+        config_->stockCodes.append(stock.code());
+        config_->stocks.insert(stock.code(), stock);
         endInsertRows();
 
         emit stockListChanged();
@@ -224,13 +224,13 @@ public:
         int updatedCount = 0;
         for (const StockInfo &newStock : newData)
         {
-            if (m_stockData.contains(newStock.code()))
+            if (config_->stocks.contains(newStock.code()))
             {
                 // Find the row index for this stock code
-                int row = m_stockCodes.indexOf(newStock.code());
+                int row = config_->stockCodes.indexOf(newStock.code());
                 if (row >= 0)
                 {
-                    m_stockData[newStock.code()] = newStock;
+                    config_->stocks[newStock.code()] = newStock;
                     QModelIndex topLeft = index(row, 0);
                     QModelIndex bottomRight = index(row, ColumnCount - 1);
                     emit dataChanged(topLeft, bottomRight);
@@ -242,12 +242,12 @@ public:
 
     void removeStock(int row)
     {
-        if (row >= 0 && row < m_stockCodes.size())
+        if (row >= 0 && row < config_->stockCodes.size())
         {
-            QString code = m_stockCodes.at(row);
+            QString code = config_->stockCodes.at(row);
             beginRemoveRows(QModelIndex(), row, row);
-            m_stockCodes.removeAt(row);
-            m_stockData.remove(code);
+            config_->stockCodes.removeAt(row);
+            config_->stocks.remove(code);
             endRemoveRows();
             emit stockListChanged();
             Logger::info(QString("Deleted stock %1 at row %2").arg(code).arg(row));
@@ -256,7 +256,7 @@ public:
 
     void moveStock(int from, int to)
     {
-        if (from >= 0 && from < m_stockCodes.size() && to >= 0 && to < m_stockCodes.size() && from != to)
+        if (from >= 0 && from < config_->stockCodes.size() && to >= 0 && to < config_->stockCodes.size() && from != to)
         {
             // Calculate the correct destination index for beginMoveRows
             int destinationIndex = to;
@@ -264,8 +264,8 @@ public:
 
             if (beginMoveRows(QModelIndex(), from, from, QModelIndex(), destinationIndex))
             {
-                QString code = m_stockCodes.takeAt(from);
-                m_stockCodes.insert(to, code);
+                QString code = config_->stockCodes.takeAt(from);
+                config_->stockCodes.insert(to, code);
                 endMoveRows();
                 emit stockListChanged();
             }
@@ -279,11 +279,11 @@ public:
     QList<StockInfo> stockData() const
     {
         QList<StockInfo> result;
-        for (const QString &code : m_stockCodes)
+        for (const QString &code : config_->stockCodes)
         {
-            if (m_stockData.contains(code))
+            if (config_->stocks.contains(code))
             {
-                result.append(m_stockData.value(code));
+                result.append(config_->stocks.value(code));
             }
         }
         return result;
@@ -292,12 +292,12 @@ public:
     void setStockData(const QList<StockInfo> &stockData)
     {
         beginResetModel();
-        m_stockCodes.clear();
-        m_stockData.clear();
+        config_->stockCodes.clear();
+        config_->stocks.clear();
         for (const StockInfo &stock : stockData)
         {
-            m_stockCodes.append(stock.code());
-            m_stockData.insert(stock.code(), stock);
+            config_->stockCodes.append(stock.code());
+            config_->stocks.insert(stock.code(), stock);
         }
         endResetModel();
     }
@@ -362,6 +362,4 @@ private:
 
 private:
     std::shared_ptr<StockConfig> config_;
-    QMap<QString, StockInfo> m_stockData;  // Map for fast lookup by code
-    QStringList m_stockCodes;              // List to maintain display order
 };
