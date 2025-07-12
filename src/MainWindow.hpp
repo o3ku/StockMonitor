@@ -52,6 +52,7 @@ public:
               createTitleBarButton(":/%1/close-button.svg", "Close", &MainWindow::onCloseButtonClicked),
           })
         , table_(new StockTableView(this))
+        , model_(new StockModel(config_, this))
         , m_refreshTimer(new QTimer(this))
         , m_dragging(false)
         , m_refreshInterval(5000)
@@ -61,6 +62,7 @@ public:
         setupGlobalShortcut();
         setupSystemTray();
         applyTheme();
+
         // loadUISettings();  // Load settings before setupTimer to use correct refresh interval
         // setupTimer();
 
@@ -266,7 +268,6 @@ private slots:
         table_->addStock(stockInfo);
         saveStockList();
         updateSearchWidgetExistingStocks();
-        requestStockPrices();
     }
 
     void onStockInfoReceived(const StockInfo &stockInfo)
@@ -306,11 +307,6 @@ private slots:
     }
 
     void onRefreshTimer()
-    {
-        requestStockPrices();
-    }
-
-    void requestStockPrices()
     {
         QList<StockInfo> stockData = table_->stockData();
         if (!stockData.isEmpty())
@@ -404,6 +400,7 @@ private:
 
         // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::saveStockList);
         // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::updateSearchWidgetExistingStocks);
+        table_->setModel(model_);
         auto wrap = new QVBoxLayout;
         wrap->setContentsMargins(5, 5, 5, 5);
         wrap->addWidget(table_, 1);
@@ -434,22 +431,49 @@ private:
     {
 #ifdef Q_OS_WIN
 
-        auto lowerKey = config_->hotkeyKey.toLower();
-        QString keyChar = lowerKey.split('+', Qt::SkipEmptyParts).last();
-        if (keyChar.length() > 1)
-        {
-            keyChar = keyChar.left(1);  // Take only first character
-        }
+        auto upperKey = config_->hotkeyKey.toUpper();
+        QString keyChar = upperKey.split('+', Qt::SkipEmptyParts).last().trimmed();
 
         UINT modifiers = 0;
-        if (lowerKey.contains("ctrl")) modifiers |= MOD_CONTROL;
-        if (lowerKey.contains("alt")) modifiers |= MOD_ALT;
-        if (lowerKey.contains("shift")) modifiers |= MOD_SHIFT;
+        if (upperKey.contains("CTRL")) modifiers |= MOD_CONTROL;
+        if (upperKey.contains("ALT")) modifiers |= MOD_ALT;
+        if (upperKey.contains("SHIFT")) modifiers |= MOD_SHIFT;
 
-        UINT vkCode = keyChar.isEmpty() ? 'S' : keyChar.at(0).toLatin1();
+        UINT vkCode = 0;
+        if (keyChar.length() == 1)
+        {
+            vkCode = keyChar.at(0).toUpper().toLatin1();
+        }
+        else
+        {
+            static QMap<QString, UINT> key2code{
+                { "F1", VK_F1 },
+                { "F2", VK_F2 },
+                { "F3", VK_F3 },
+                { "F4", VK_F4 },
+                { "F5", VK_F5 },
+                { "F6", VK_F6 },
+                { "F7", VK_F7 },
+                { "F8", VK_F8 },
+                { "F9", VK_F9 },
+                { "F10", VK_F10 },
+                { "F11", VK_F11 },
+                { "F12", VK_F12 },
+                { "SPACE", VK_SPACE },
+                { "ENTER", VK_RETURN },
+                { "ESCAPE", VK_ESCAPE },
+            };
+            vkCode = key2code.value(keyChar, 'S');
+        }
+
         if (!RegisterHotKey((HWND)winId(), 1, modifiers, vkCode))
         {
-            Logger::error(QString("Failed to register global hotkey %1").arg(lowerKey));
+            DWORD error = GetLastError();
+            Logger::error(QString("Failed to register global hotkey %1 (Error: %2)").arg(config_->hotkeyKey).arg(error));
+        }
+        else
+        {
+            Logger::info(QString("Successfully registered global hotkey: %1").arg(config_->hotkeyKey));
         }
 #endif
     }
@@ -574,6 +598,7 @@ private:
     QLineEdit *searchBox_;
     QList<QPushButton *> btns_;
     StockTableView *table_;
+    StockModel *model_;
 
     QTimer *m_refreshTimer;
 

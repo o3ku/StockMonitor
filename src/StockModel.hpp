@@ -28,8 +28,9 @@ public:
         ColumnCount
     };
 
-    explicit StockModel(QObject *parent = nullptr)
+    explicit StockModel(const std::shared_ptr<StockConfig> &config, QObject *parent = nullptr)
         : QAbstractTableModel(parent)
+        , config_(config)
     {
     }
 
@@ -359,6 +360,8 @@ private:
         return {};
     }
 
+private:
+    std::shared_ptr<StockConfig> config_;
     QMap<QString, StockInfo> m_stockData;  // Map for fast lookup by code
     QStringList m_stockCodes;              // List to maintain display order
 };

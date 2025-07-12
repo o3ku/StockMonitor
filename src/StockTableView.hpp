@@ -53,49 +53,48 @@ class StockTableView : public QTableView
 public:
     explicit StockTableView(QWidget *parent = nullptr)
         : QTableView(parent)
-        , m_stockModel(new StockModel(this))
         , m_dropIndicatorRow(-1)
     {
         setupView();
         setupContextMenu();
-        setModel(m_stockModel);
         setColumnWidth(StockModel::NameColumn, 90);
         setColumnWidth(StockModel::CurrentPriceColumn, 80);
         setColumnWidth(StockModel::ChangePercentColumn, 70);
 
         // Connect model signals
-        connect(m_stockModel, &StockModel::stockListChanged, this, &StockTableView::stockListChanged);
+        // connect(m_stockModel, &StockModel::stockListChanged, this, &StockTableView::stockListChanged);
     }
 
     void addStock(const StockInfo &stock)
     {
-        // Check if stock already exists
-        QList<StockInfo> existingStocks = m_stockModel->stockData();
-        for (const StockInfo &existingStock : existingStocks)
-        {
-            if (existingStock.code() == stock.code())
-            {
-                QMessageBox::information(this, "Information", QString("Stock %1 already exists!").arg(stock.code()));
-                return;
-            }
-        }
+        // // Check if stock already exists
+        // QList<StockInfo> existingStocks = m_stockModel->stockData();
+        // for (const StockInfo &existingStock : existingStocks)
+        // {
+        //     if (existingStock.code() == stock.code())
+        //     {
+        //         QMessageBox::information(this, "Information", QString("Stock %1 already exists!").arg(stock.code()));
+        //         return;
+        //     }
+        // }
 
-        m_stockModel->addStock(stock);
+        // m_stockModel->addStock(stock);
     }
 
     void updateStockData(const QList<StockInfo> &newData)
     {
-        m_stockModel->updateStockData(newData);
+        // m_stockModel->updateStockData(newData);
     }
 
     QList<StockInfo> stockData() const
     {
-        return m_stockModel->stockData();
+        // return m_stockModel->stockData();
+        return {};
     }
 
     void setStockData(const QList<StockInfo> &stockData)
     {
-        m_stockModel->setStockData(stockData);
+        // m_stockModel->setStockData(stockData);
     }
 
 signals:
@@ -202,19 +201,19 @@ protected:
         QModelIndex index = indexAt(event->pos());
         if (index.isValid())
         {
-            setCurrentIndex(index);
+            // setCurrentIndex(index);
 
-            // Update action states
-            int row = index.row();
-            int rowCount = m_stockModel->rowCount();
+            // // Update action states
+            // int row = index.row();
+            // int rowCount = m_stockModel->rowCount();
 
-            // Enable/disable move actions based on current position
-            m_moveUpAction->setEnabled(row > 0);
-            m_moveDownAction->setEnabled(row < rowCount - 1);
-            m_moveToTopAction->setEnabled(row > 0);
-            m_moveToBottomAction->setEnabled(row < rowCount - 1);
+            // // Enable/disable move actions based on current position
+            // m_moveUpAction->setEnabled(row > 0);
+            // m_moveDownAction->setEnabled(row < rowCount - 1);
+            // m_moveToTopAction->setEnabled(row > 0);
+            // m_moveToBottomAction->setEnabled(row < rowCount - 1);
 
-            m_contextMenu->exec(event->globalPos());
+            // m_contextMenu->exec(event->globalPos());
         }
     }
 
@@ -241,7 +240,7 @@ private slots:
         QModelIndex currentIndex = this->currentIndex();
         if (currentIndex.isValid())
         {
-            m_stockModel->removeStock(currentIndex.row());
+            // m_stockModel->removeStock(currentIndex.row());
         }
     }
 
@@ -251,20 +250,20 @@ private slots:
         if (currentIndex.isValid() && currentIndex.row() > 0)
         {
             int currentRow = currentIndex.row();
-            m_stockModel->moveStock(currentRow, currentRow - 1);
-            setCurrentIndex(m_stockModel->index(currentRow - 1, 0));
+            // m_stockModel->moveStock(currentRow, currentRow - 1);
+            // setCurrentIndex(m_stockModel->index(currentRow - 1, 0));
         }
     }
 
     void onMoveDown()
     {
-        QModelIndex currentIndex = this->currentIndex();
-        if (currentIndex.isValid() && currentIndex.row() < m_stockModel->rowCount() - 1)
-        {
-            int currentRow = currentIndex.row();
-            m_stockModel->moveStock(currentRow, currentRow + 1);
-            setCurrentIndex(m_stockModel->index(currentRow + 1, 0));
-        }
+        // QModelIndex currentIndex = this->currentIndex();
+        // if (currentIndex.isValid() && currentIndex.row() < m_stockModel->rowCount() - 1)
+        // {
+        //     int currentRow = currentIndex.row();
+        //     m_stockModel->moveStock(currentRow, currentRow + 1);
+        //     setCurrentIndex(m_stockModel->index(currentRow + 1, 0));
+        // }
     }
 
     void onMoveToTop()
@@ -272,22 +271,22 @@ private slots:
         QModelIndex currentIndex = this->currentIndex();
         if (currentIndex.isValid() && currentIndex.row() > 0)
         {
-            int currentRow = currentIndex.row();
-            m_stockModel->moveStock(currentRow, 0);
-            setCurrentIndex(m_stockModel->index(0, 0));
+            // int currentRow = currentIndex.row();
+            // m_stockModel->moveStock(currentRow, 0);
+            // setCurrentIndex(m_stockModel->index(0, 0));
         }
     }
 
     void onMoveToBottom()
     {
-        QModelIndex currentIndex = this->currentIndex();
-        if (currentIndex.isValid() && currentIndex.row() < m_stockModel->rowCount() - 1)
-        {
-            int currentRow = currentIndex.row();
-            int lastRow = m_stockModel->rowCount() - 1;
-            m_stockModel->moveStock(currentRow, lastRow);
-            setCurrentIndex(m_stockModel->index(lastRow, 0));
-        }
+        // QModelIndex currentIndex = this->currentIndex();
+        // if (currentIndex.isValid() && currentIndex.row() < m_stockModel->rowCount() - 1)
+        // {
+        //     int currentRow = currentIndex.row();
+        //     int lastRow = m_stockModel->rowCount() - 1;
+        //     m_stockModel->moveStock(currentRow, lastRow);
+        //     setCurrentIndex(m_stockModel->index(lastRow, 0));
+        // }
     }
 
 private:
@@ -355,7 +354,6 @@ private:
         connect(m_deleteAction, &QAction::triggered, this, &StockTableView::onDeleteStock);
     }
 
-    StockModel *m_stockModel;
     QMenu *m_contextMenu;
     QAction *m_deleteAction;
     QAction *m_moveUpAction;
