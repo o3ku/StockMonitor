@@ -33,8 +33,7 @@
 #include "StockApiService.hpp"
 #include "StockConfig.hpp"
 #include "StockInfo.hpp"
-#include "StockSearchResult.hpp"
-#include "StockSearchWidget.hpp"
+#include "StockSearchResultWindow.hpp"
 #include "StockTableView.hpp"
 
 class MainWindow : public QFrame
@@ -45,111 +44,145 @@ public:
     explicit MainWindow(QWidget *parent = nullptr)
         : QFrame(parent)
         , config_(std::make_shared<StockConfig>())
+        , api_(StockApiService::instance().get("sina"))
         , titleBar_(new QWidget(this))
-        , searchBox_(new QLineEdit(this))
+        , input_(new QLineEdit(this))
+        , searchResultWidget_(new StockSearchWidget(config_, api_, this))
         , btns_({
               createTitleBarButton(":/%1/theme-toggle.svg", "Switch Theme", &MainWindow::toggleTheme),
               createTitleBarButton(":/%1/close-button.svg", "Close", &MainWindow::onCloseButtonClicked),
           })
-        , table_(new StockTableView(this))
-        , model_(new StockModel(config_, this))
-        , m_refreshTimer(new QTimer(this))
-        , m_dragging(false)
-        , m_refreshInterval(5000)
-        , m_saveSettingsTimer(new QTimer(this))
+        , table_(new StockTableView(config_, this))
+        , refreshTimer_(new QTimer(this))
+        , searchDelayTimer_(new QTimer(this))
     {
         setupUi();
         setupGlobalShortcut();
         setupSystemTray();
         applyTheme();
+        startRefresh();
 
-        // loadUISettings();  // Load settings before setupTimer to use correct refresh interval
-        // setupTimer();
+        refreshTimer_->setSingleShot(true);
+        searchDelayTimer_->setSingleShot(true);
 
-        // Setup settings save timer (single shot, 500ms delay)
-        // m_saveSettingsTimer->setSingleShot(true);
-        // m_saveSettingsTimer->setInterval(500);
-        // connect(m_saveSettingsTimer, &QTimer::timeout, this, &MainWindow::saveUISettings);
+        connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
+        connect(api_, &IStockApiProvider::errorOccurred, this, [] {
+        });
+        connect(api_, &IStockApiProvider::stockInfosReceived, table_, &StockTableView::updateStocksDetail);
 
-        // // Install event filter to capture wheel events from child widgets
-        // installEventFilter(this);
+        connect(input_, &QLineEdit::textChanged, this, [this] {
+            searchDelayTimer_->start(500);
+        });
+        connect(searchDelayTimer_, &QTimer::timeout, this, [this] {
+            // showInputMode();
+            // result_->hide();
+            input_->setFocus();
+            auto text = input_->text().trimmed();
+            if (text.isEmpty()) return;
+            qDebug() << "search stock" << api_->name() << text;
+            api_->searchStocksAsync(text);
+        });
+        connect(api_, &IStockApiProvider::searchCompleted, searchResultWidget_, &StockSearchWidget::showResults);
+        connect(searchResultWidget_, &StockSearchWidget::stockSelected, this, [this](auto &&code) {
+            searchResultWidget_->hide();
+            input_->clear();
+            input_->setFocus();
+            table_->addStock(code);
+            startRefresh();
+        });
 
-        // // Also install event filter on child widgets
-        // if (searchBox_)
-        // {
-        //     searchBox_->installEventFilter(this);
-        // }
-        // if (table_)
-        // {
-        //     table_->installEventFilter(this);
-        // }
-        // if (m_centralWidget)
-        // {
-        //     m_centralWidget->installEventFilter(this);
-        // }
-
-        // // Connect API service signals
-
-        // connect(&StockApiService::instance(), &StockApiService::stockInfosReceived, this, &MainWindow::onStockInfosReceived);
-        // connect(&StockApiService::instance(), &StockApiService::errorOccurred, this, &MainWindow::onApiError);
-
-        // StockApiService::instance().setApiSource(ConfigManager::instance().getConfig().apiSource);
-        // loadStockList();
+        installEventFilter(this);
+        titleBar_->installEventFilter(this);
+        input_->installEventFilter(this);
+        searchResultWidget_->installEventFilter(this);
     }
 
     ~MainWindow()
     {
-        if (m_refreshTimer)
-        {
-            m_refreshTimer->stop();
-        }
-        saveStockList();
-
 #ifdef Q_OS_WIN
         UnregisterHotKey((HWND)winId(), 1);
 #endif
     }
 
 protected:
-    void mousePressEvent(QMouseEvent *event) override
+    bool eventFilter(QObject *watched, QEvent *event) override
     {
-        if (event->button() == Qt::LeftButton && titleBar_ && titleBar_->geometry().contains(event->pos()))
+        auto etype = event->type();
+        if (etype == QEvent::KeyPress)
         {
-            m_dragging = true;
-            m_dragPosition = event->globalPos() - frameGeometry().topLeft();
-            event->accept();
+            auto ke = static_cast<QKeyEvent *>(event);
+            auto key = ke->key();
+            if (watched == input_ || watched == searchResultWidget_)
+            {
+                switch (key)
+                {
+                case Qt::Key_Escape:
+                    if (input_->text().isEmpty())
+                        return eventFilter(this, event);
+                    else
+                    {
+                        input_->clear();
+                    }
+                    break;
+                case Qt::Key_Up:
+                    searchResultWidget_->selectPrevRow();
+                    break;
+                case Qt::Key_Down:
+                    searchResultWidget_->selectNextRow();
+                    break;
+                case Qt::Key_Return:
+                case Qt::Key_Enter:
+                    searchResultWidget_->chooseCurrentRow(searchResultWidget_->currentIndex());
+                    break;
+                }
+            }
+            else if (watched == this && key == Qt::Key_Escape)
+            {
+                hide();
+            }
         }
-    }
-
-    void mouseMoveEvent(QMouseEvent *event) override
-    {
-        if (event->buttons() & Qt::LeftButton && m_dragging)
+        else if (watched == this && etype == QEvent::Wheel && ((QWheelEvent *)event)->modifiers() & Qt::AltModifier)
         {
-            move(event->globalPos() - m_dragPosition);
-            event->accept();
+            auto changeOpacity = [this, currentOpacity = windowOpacity()](int angle) {
+                qreal newOpacity = qBound(0.2, currentOpacity + (angle > 0 ? -0.05 : 0.05), 1.0);
+                if (qAbs(newOpacity - currentOpacity) > 0.001)
+                {
+                    setWindowOpacity(newOpacity);
+                    config_->windowOpacity = newOpacity;
+                }
+            };
+            auto we = (QWheelEvent *)event;
+            if (QPoint numPixels = we->pixelDelta(); !numPixels.isNull())
+            {
+                changeOpacity(numPixels.x());
+            }
+            else if (QPoint numDegrees = we->angleDelta() / 8; !numDegrees.isNull())
+            {
+                changeOpacity(numDegrees.x());
+            }
         }
-    }
-
-    void mouseReleaseEvent(QMouseEvent *event) override
-    {
-        if (event->button() == Qt::LeftButton)
+        else if (watched == this && (etype == QEvent::Resize || etype == QEvent::Show))
         {
-            m_dragging = false;
-            event->accept();
+            searchResultWidget_->setGeometry(table_->geometry());
         }
-    }
-
-    void keyPressEvent(QKeyEvent *event) override
-    {
-        if (event->key() == Qt::Key_Escape)
+        else if (watched == titleBar_)
         {
-            hide();
-            event->accept();
+            auto me = dynamic_cast<QMouseEvent *>(event);
+            if (etype == QEvent::MouseButtonPress && me->button() == Qt::LeftButton)
+            {
+                mousePressedPosition_ = me->globalPos() - geometry().topLeft();
+                return true;
+            }
+            else if (etype == QEvent::MouseMove && !mousePressedPosition_.isNull() && me->buttons() & Qt::LeftButton)
+            {
+                move(me->globalPos() - mousePressedPosition_);
+                return true;
+            }
+            else if (etype == QEvent::MouseButtonRelease && me->button() != Qt::LeftButton)
+                mousePressedPosition_ = {};
+            return true;
         }
-        else
-        {
-            QWidget::keyPressEvent(event);
-        }
+        return QWidget::eventFilter(watched, event);
     }
 
 #ifdef Q_OS_WIN
@@ -171,154 +204,11 @@ protected:
     }
 #endif
 
-    void wheelEvent(QWheelEvent *event) override
-    {
-        if (event->modifiers() & Qt::AltModifier)
-        {
-            // Handle transparency control
-            qreal currentOpacity = windowOpacity();
-
-            // Try multiple ways to get wheel direction
-            int wheelDeltaY = event->angleDelta().y();
-            int wheelDeltaX = event->angleDelta().x();
-            int pixelDeltaY = event->pixelDelta().y();
-            int pixelDeltaX = event->pixelDelta().x();
-
-            // Determine effective wheel direction
-            int effectiveDelta = 0;
-            if (wheelDeltaY != 0)
-            {
-                effectiveDelta = wheelDeltaY;
-            }
-            else if (pixelDeltaY != 0)
-            {
-                effectiveDelta = pixelDeltaY;
-            }
-            else if (wheelDeltaX != 0)
-            {
-                effectiveDelta = wheelDeltaX;
-            }
-            else if (pixelDeltaX != 0)
-            {
-                effectiveDelta = pixelDeltaX;
-            }
-            else
-            {
-                // If all wheel data is 0, use a simple toggle approach
-                // This is a fallback for when wheel data is lost
-                static bool lastDirection = true;  // true = increase opacity
-                effectiveDelta = lastDirection ? 120 : -120;
-                lastDirection = !lastDirection;  // Toggle for next time
-            }
-
-            // Up scroll (positive delta) = more opaque (less transparent)
-            // Down scroll (negative delta) = more transparent
-            qreal delta = effectiveDelta > 0 ? 0.05 : -0.05;
-            qreal newOpacity = qBound(0.3, currentOpacity + delta, 1.0);
-
-            // Only update if opacity actually changed
-            if (qAbs(newOpacity - currentOpacity) > 0.001)
-            {
-                setWindowOpacity(newOpacity);
-                config_->windowOpacity = newOpacity;
-
-                // Use timer to delay saving settings (throttling)
-                m_saveSettingsTimer->start();
-            }
-        }
-    }
-
 private:
-    StockInfo createEmptyStockInfo(const QString &code, const QString &name = QString())
+    void startRefresh()
     {
-        StockInfo stockInfo;
-        stockInfo.setCode(code);
-        stockInfo.setName(name.isEmpty() ? code : name);
-        stockInfo.setLastUpdate(QDateTime::currentDateTime());
-
-        // Initialize price data to 0, will be updated by timer
-        stockInfo.setCurrentPrice(0.0);
-        stockInfo.setYesterday(0.0);
-        stockInfo.setChange(0.0);
-        stockInfo.setChangePercent(0.0);
-        stockInfo.setHigh(0.0);
-        stockInfo.setLow(0.0);
-
-        return stockInfo;
-    }
-
-    void updateSearchWidgetExistingStocks()
-    {
-        if (searchBox_ && table_)
-        {
-            QStringList stockCodes;
-            QList<StockInfo> stocks = table_->stockData();
-            for (const StockInfo &stock : stocks)
-            {
-                stockCodes.append(stock.code());
-            }
-            // searchBox_->setExistingStocks(stockCodes);
-        }
-    }
-
-private slots:
-    void onStockSelected(const StockSearchResult &result)
-    {
-        StockInfo stockInfo = createEmptyStockInfo(result.code(), result.name());
-        table_->addStock(stockInfo);
-        saveStockList();
-        updateSearchWidgetExistingStocks();
-    }
-
-    void onStockInfoReceived(const StockInfo &stockInfo)
-    {
-        // Single stock info received - not used in current implementation
-    }
-
-    void onStockInfosReceived(const QList<StockInfo> &stockInfos)
-    {
-
-        // Update stock data with API names (don't preserve original names if they are just codes)
-        QList<StockInfo> updatedStocks;
-        for (const StockInfo &newStock : stockInfos)
-        {
-            StockInfo stock = newStock;
-
-            // Only preserve original name if it's different from the code (i.e., it's a real name)
-            for (const StockInfo &originalStock : table_->stockData())
-            {
-                if (originalStock.code() == newStock.code())
-                {
-                    // If original name is the same as code, use the new name from API
-                    if (originalStock.name() != originalStock.code() && !newStock.name().isEmpty())
-                    {
-                        // Keep the original name if it's a real name and API name is not empty
-                        stock.setName(originalStock.name());
-                    }
-                    // Otherwise use the name from API (newStock already has it)
-                    break;
-                }
-            }
-            updatedStocks.append(stock);
-        }
-
-        // Update table data - this will trigger automatic table refresh via dataChanged signal
-        table_->updateStockData(updatedStocks);
-    }
-
-    void onRefreshTimer()
-    {
-        QList<StockInfo> stockData = table_->stockData();
-        if (!stockData.isEmpty())
-        {
-            QStringList codes;
-            for (const StockInfo &stock : stockData)
-            {
-                codes.append(stock.code());
-            }
-
-            // StockApiService::instance().getStockInfosAsync(codes);
-        }
+        api_->getStockInfosAsync(config_->stockCodes);
+        refreshTimer_->start(1000);
     }
 
     void onApiError(const QString &error)
@@ -388,19 +278,19 @@ private:
         setWindowIcon(QIcon(":/app-icon.svg"));
         setMinimumSize(260, 360);
 
+        input_->setObjectName("searchInput");
         titleBar_->setFixedHeight(40);
         titleBar_->setObjectName("titleBar");
         QHBoxLayout *titleLayout = new QHBoxLayout(titleBar_);
         titleLayout->setContentsMargins(5, 5, 5, 5);
         titleLayout->setSpacing(0);
-        titleLayout->addWidget(searchBox_, 1);
+        titleLayout->addWidget(input_, 1);
         titleLayout->addSpacing(20);
         titleLayout->addWidget(btns_[0]);
         titleLayout->addWidget(btns_[1]);
 
         // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::saveStockList);
         // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::updateSearchWidgetExistingStocks);
-        table_->setModel(model_);
         auto wrap = new QVBoxLayout;
         wrap->setContentsMargins(5, 5, 5, 5);
         wrap->addWidget(table_, 1);
@@ -414,17 +304,9 @@ private:
         layout->addLayout(wrap, 1);
         layout->addWidget(statusBar);
 
+        searchResultWidget_->raise();
+        searchResultWidget_->hide();
         setWindowOpacity(config_->windowOpacity);
-    }
-
-    void setupTimer()
-    {
-        m_refreshTimer->setInterval(m_refreshInterval);
-        connect(m_refreshTimer, &QTimer::timeout, this, &MainWindow::onRefreshTimer);
-
-        QTimer::singleShot(1000, this, [this]() {
-            m_refreshTimer->start();
-        });
     }
 
     void setupGlobalShortcut()
@@ -503,15 +385,14 @@ private:
 
     void toggleWindowVisibility()
     {
-        if (isVisible() && !isMinimized())
+        if (!isActiveWindow())
         {
-            hide();
+            show();
+            activateWindow();
         }
         else
         {
-            show();
-            raise();
-            activateWindow();
+            hide();
         }
     }
 
@@ -593,22 +474,17 @@ private:
 
 private:
     std::shared_ptr<StockConfig> config_;
+    IStockApiProvider *api_{ nullptr };
 
     QWidget *titleBar_;
-    QLineEdit *searchBox_;
+    QLineEdit *input_;
+    StockSearchWidget *searchResultWidget_;
     QList<QPushButton *> btns_;
     StockTableView *table_;
-    StockModel *model_;
-
-    QTimer *m_refreshTimer;
 
     // Window dragging
-    bool m_dragging;
-    QPoint m_dragPosition;
+    QPoint mousePressedPosition_;
 
-    // System tray
-    int m_refreshInterval;
-
-    // Event throttling
-    QTimer *m_saveSettingsTimer;
+    QTimer *refreshTimer_;
+    QTimer *searchDelayTimer_;
 };

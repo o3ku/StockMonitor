@@ -4,215 +4,108 @@
 #include <QDesktopWidget>
 #include <QFocusEvent>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QKeyEvent>
 #include <QLabel>
-#include <QListWidget>
-#include <QListWidgetItem>
 #include <QScreen>
+#include <QStandardItemModel>
 #include <QStyle>
+#include <QTableView>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <algorithm>
 
 #include "Logger.hpp"
-#include "StockSearchResult.hpp"
+#include "StockInfo.hpp"
 
-class StockSearchResultWindow : public QWidget
+class StockSearchWidget : public QTableView
 {
     Q_OBJECT
 
 public:
-    explicit StockSearchResultWindow(QWidget *parent = nullptr)
-        : QWidget(parent)
-        , m_resultsListWidget(nullptr)
-        , m_mainLayout(nullptr)
-        , m_selectedIndex(-1)
+    explicit StockSearchWidget(const std::shared_ptr<StockConfig> &config, IStockApiProvider *api, QWidget *parent = nullptr)
+        : QTableView(parent)
+        , config_(config)
+        , model_(new QStandardItemModel(this))
+        , api_(api)
+        , selectedIndex_(-1)
     {
-        setupUI();
+        hide();
+        model_->setColumnCount(2);
+        this->setObjectName("searchResultsList");
+        this->horizontalHeader()->hide();
+        this->verticalHeader()->hide();
+        this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        this->setSelectionBehavior(QTableView::SelectRows);
+        this->setSelectionMode(QTableView::SingleSelection);
+        this->setEditTriggers(QTableView::NoEditTriggers);
+        this->setModel(model_);
 
-        // Set window properties: stay on top, frameless, tool window
-        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-        setAttribute(Qt::WA_ShowWithoutActivating);
-        setFocusPolicy(Qt::StrongFocus);
+        connect(this, &QTableView::activated, this, &StockSearchWidget::chooseCurrentRow);
+        // connect(result_, &QTableView::itemClicked, this, [this](QListWidgetItem *item) {
+        //     int row = result_->row(item);
+        //     auto stock = stocks_.value(row);
+        //     config_->stockCodes << stock.code();
+        //     input_->clear();
+        //     showInputMode();
+        // });
     }
 
-    void showResults(const QList<StockSearchResult> &results, const QPoint &position, int width = 298)
+    void selectNextRow()
+    {
+        auto rows = model_->rowCount();
+        this->selectRow((this->currentIndex().row() + 1 + rows) % rows);
+    }
+    void selectPrevRow()
+    {
+        auto rows = model_->rowCount();
+        this->selectRow((this->currentIndex().row() - 1 + rows) % rows);
+    }
+    void chooseCurrentRow(const QModelIndex &index)
+    {
+        auto code = model_->index(this->currentIndex().row(), 0).data(Qt::DisplayRole).toString();
+        hide();
+        emit stockSelected(code);
+    }
+
+    void showResults(const QList<StockInfo> &results)
     {
         // Sort results according to market priority
-        m_searchResults = sortResultsByMarket(results);
-        m_selectedIndex = -1;
+        // stocks_ = sortResultsByMarket(results);
+        stocks_ = results;
+        // result_->clear();
+        selectedIndex_ = -1;
 
-        m_resultsListWidget->clear();
-
-        int maxItems = qMin(results.size(), 6);
-
-        for (int i = 0; i < maxItems; ++i)
+        model_->clear();
+        model_->setColumnCount(2);
+        for (auto &&it : results)
         {
-            const StockSearchResult &result = m_searchResults[i];
-            QWidget *itemWidget = createResultItem(result, i);
-
-            QListWidgetItem *item = new QListWidgetItem();
-            item->setSizeHint(QSize(width, 35));
-            m_resultsListWidget->addItem(item);
-            m_resultsListWidget->setItemWidget(item, itemWidget);
+            model_->appendRow({ new QStandardItem(it.code()), new QStandardItem(it.name()) });
         }
-
-        // Set window size and position - use provided width
-        int windowHeight = maxItems * 35;
-        setFixedSize(width, windowHeight);
-
-        // Ensure window stays within screen bounds
-        QScreen *screen = QApplication::primaryScreen();
-        QRect screenGeometry = screen->availableGeometry();
-
-        int x = position.x();
-        int y = position.y();
-
-        // Check right boundary
-        if (x + width > screenGeometry.right())
-        {
-            x = screenGeometry.right() - width;
-        }
-
-        // Check bottom boundary
-        if (y + height() > screenGeometry.bottom())
-        {
-            y = position.y() - height();
-        }
-
-        // Ensure not exceeding top-left boundaries
-        x = qMax(x, screenGeometry.left());
-        y = qMax(y, screenGeometry.top());
-
-        move(x, y);
         show();
-        raise();
-        // Don't activate window or set focus to keep search box focused
-        // activateWindow();
-        // setFocus();
-
-        Logger::info(QString("Showing %1 search suggestions in popup window").arg(maxItems));
     }
 
     void hideResults()
     {
-        hide();
+        this->hide();
     }
 
 signals:
-    void stockSelected(const StockSearchResult &result);
-    void escapePressed();
+    void stockSelected(const QString &code);
 
-protected:
-    void keyPressEvent(QKeyEvent *event) override
-    {
-        if (event->key() == Qt::Key_Up)
-        {
-            if (m_selectedIndex > 0)
-            {
-                updateSelectedItem(m_selectedIndex - 1);
-            }
-            event->accept();
-        }
-        else if (event->key() == Qt::Key_Down)
-        {
-            if (m_selectedIndex < m_searchResults.size() - 1)
-            {
-                updateSelectedItem(m_selectedIndex + 1);
-            }
-            event->accept();
-        }
-        else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
-        {
-            if (m_selectedIndex >= 0 && m_selectedIndex < m_searchResults.size())
-            {
-                emit stockSelected(m_searchResults[m_selectedIndex]);
-            }
-            event->accept();
-        }
-        else if (event->key() == Qt::Key_Escape)
-        {
-            hideResults();
-            // Emit signal to notify main window to hide
-            emit escapePressed();
-            event->accept();
-        }
-        else
-        {
-            QWidget::keyPressEvent(event);
-        }
-    }
-
-    void focusOutEvent(QFocusEvent *event) override
-    {
-        // Delay hiding to allow clicking on results
-        QTimer::singleShot(100, this, [this]() {
-            // Check if focus moved to search widget or stayed within result window
-            QWidget *focusWidget = QApplication::focusWidget();
-            bool shouldHide = true;
-
-            if (focusWidget)
-            {
-                // Check if focus moved to parent search widget
-                QWidget *widget = focusWidget;
-                while (widget)
-                {
-                    if (widget == parentWidget())  // Search widget
-                    {
-                        shouldHide = false;
-                        break;
-                    }
-                    if (widget == this)  // Still within result window
-                    {
-                        shouldHide = false;
-                        break;
-                    }
-                    widget = widget->parentWidget();
-                }
-            }
-
-            if (shouldHide)
-            {
-                hide();
-            }
-        });
-
-        QWidget::focusOutEvent(event);
-    }
-
-private slots:
+private:
     void onItemClicked(int row)
     {
-        if (row >= 0 && row < m_searchResults.size())
-        {
-            emit stockSelected(m_searchResults[row]);
-        }
+        // if (row >= 0 && row < stocks_.size())
+        // {
+        //     emit stockSelected(stocks_[row]);
+        // }
     }
 
 private:
-    void setupUI()
-    {
-        m_mainLayout = new QVBoxLayout(this);
-        m_mainLayout->setContentsMargins(0, 0, 0, 0);
-        m_mainLayout->setSpacing(0);
-
-        m_resultsListWidget = new QListWidget(this);
-        m_resultsListWidget->setObjectName("searchResultsList");
-
-        // Disable scroll bars
-        m_resultsListWidget->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-        m_resultsListWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
-        connect(m_resultsListWidget, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-            int row = m_resultsListWidget->row(item);
-            onItemClicked(row);
-        });
-
-        m_mainLayout->addWidget(m_resultsListWidget);
-    }
-
-    QWidget *createResultItem(const StockSearchResult &result, int index)
+    QWidget *createResultItem(const StockInfo &result, int index)
     {
         QWidget *itemWidget = new QWidget();
         itemWidget->setFixedHeight(35);
@@ -238,19 +131,19 @@ private:
 
     void updateSelectedItem(int index)
     {
-        if (index >= 0 && index < m_resultsListWidget->count())
-        {
-            m_selectedIndex = index;
-            m_resultsListWidget->setCurrentRow(index);
-        }
+        // if (index >= 0 && index < result_->count())
+        //{
+        //    selectedIndex_ = index;
+        //    result_->setCurrentRow(index);
+        //}
     }
 
-    QList<StockSearchResult> sortResultsByMarket(const QList<StockSearchResult> &results) const
+    QList<StockInfo> sortResultsByMarket(const QList<StockInfo> &results) const
     {
-        QList<StockSearchResult> sortedResults = results;
+        QList<StockInfo> sortedResults = results;
 
         // Sort by market priority
-        std::sort(sortedResults.begin(), sortedResults.end(), [this](const StockSearchResult &a, const StockSearchResult &b) {
+        std::sort(sortedResults.begin(), sortedResults.end(), [this](const StockInfo &a, const StockInfo &b) {
             return getMarketPriority(a.code()) < getMarketPriority(b.code());
         });
 
@@ -288,9 +181,11 @@ private:
         }
     }
 
-    QListWidget *m_resultsListWidget;
-    QVBoxLayout *m_mainLayout;
+private:
+    std::shared_ptr<StockConfig> config_;
+    QStandardItemModel *model_;
+    IStockApiProvider *api_{ nullptr };
 
-    QList<StockSearchResult> m_searchResults;
-    int m_selectedIndex;
+    QList<StockInfo> stocks_;
+    int selectedIndex_;
 };

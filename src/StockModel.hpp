@@ -32,13 +32,23 @@ public:
         : QAbstractTableModel(parent)
         , config_(config)
     {
+        for (auto &&it : config_->stockCodes)
+        {
+            stocks_[it] = StockInfo(it);
+        }
     }
 
-    // QAbstractTableModel interface
+public:
+    int width(int col) const
+    {
+        static QList<int> widths{ 90, 70, 70 };
+        return widths.value(col);
+    }
+
     int rowCount(const QModelIndex &parent = QModelIndex()) const override
     {
         Q_UNUSED(parent)
-        return config_->stockCodes.size();
+        return stocks_.size();
     }
 
     int columnCount(const QModelIndex &parent = QModelIndex()) const override
@@ -49,12 +59,11 @@ public:
 
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override
     {
-        if (!index.isValid() || index.row() >= config_->stockCodes.size()) return QVariant();
+        if (!index.isValid() || index.row() >= stocks_.size()) return QVariant();
 
         const QString &code = config_->stockCodes.at(index.row());
-        if (!config_->stocks.contains(code)) return QVariant();
-
-        const StockInfo &stock = config_->stocks.value(code);
+        // if (!stocks_.contains(code)) return {};
+        const StockInfo &stock = stocks_.value(code);
 
         switch (role)
         {
@@ -85,9 +94,9 @@ public:
             {
             case CurrentPriceColumn:
             case ChangePercentColumn:
-                return getStockColor(stock);
+                return config_->getPriceColor(stock.isUp());
             case NameColumn:
-                return getDefaultTextColor();
+                return config_->getTextColor();
             }
             break;
 
@@ -202,42 +211,23 @@ public:
         return false;
     }
 
-    // Custom methods
-    void addStock(const StockInfo &stock)
+    void updateStocksDetail(const QList<StockInfo> &arr)
     {
-        // Check if stock already exists
-        if (config_->stocks.contains(stock.code()))
+        for (auto &&it : arr)
         {
-            return;
+            if (!config_->stockCodes.contains(it.code())) continue;
+            stocks_[it.code()] = it;
+            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), { Qt::DisplayRole });
         }
-
-        beginInsertRows(QModelIndex(), config_->stockCodes.size(), config_->stockCodes.size());
-        config_->stockCodes.append(stock.code());
-        config_->stocks.insert(stock.code(), stock);
-        endInsertRows();
-
-        emit stockListChanged();
     }
 
-    void updateStockData(const QList<StockInfo> &newData)
+    void addStock(const QString &code)
     {
-        int updatedCount = 0;
-        for (const StockInfo &newStock : newData)
-        {
-            if (config_->stocks.contains(newStock.code()))
-            {
-                // Find the row index for this stock code
-                int row = config_->stockCodes.indexOf(newStock.code());
-                if (row >= 0)
-                {
-                    config_->stocks[newStock.code()] = newStock;
-                    QModelIndex topLeft = index(row, 0);
-                    QModelIndex bottomRight = index(row, ColumnCount - 1);
-                    emit dataChanged(topLeft, bottomRight);
-                    updatedCount++;
-                }
-            }
-        }
+        if (config_->stockCodes.contains(code)) return;
+        beginInsertRows(QModelIndex(), rowCount(), rowCount() + 1);
+        config_->stockCodes.append(code);
+        stocks_[code] = StockInfo(code);
+        endInsertRows();
     }
 
     void removeStock(int row)
@@ -247,7 +237,7 @@ public:
             QString code = config_->stockCodes.at(row);
             beginRemoveRows(QModelIndex(), row, row);
             config_->stockCodes.removeAt(row);
-            config_->stocks.remove(code);
+            stocks_.remove(code);
             endRemoveRows();
             emit stockListChanged();
             Logger::info(QString("Deleted stock %1 at row %2").arg(code).arg(row));
@@ -281,25 +271,12 @@ public:
         QList<StockInfo> result;
         for (const QString &code : config_->stockCodes)
         {
-            if (config_->stocks.contains(code))
+            if (stocks_.contains(code))
             {
-                result.append(config_->stocks.value(code));
+                result.append(stocks_.value(code));
             }
         }
         return result;
-    }
-
-    void setStockData(const QList<StockInfo> &stockData)
-    {
-        beginResetModel();
-        config_->stockCodes.clear();
-        config_->stocks.clear();
-        for (const StockInfo &stock : stockData)
-        {
-            config_->stockCodes.append(stock.code());
-            config_->stocks.insert(stock.code(), stock);
-        }
-        endResetModel();
     }
 
 signals:
@@ -322,44 +299,7 @@ private:
         }
     }
 
-    QColor getStockColor(const StockInfo &stock) const
-    {
-        // double change = stock.change();
-
-        // auto isDarkTheme = ConfigManager::instance().getConfig().theme == "dark";
-        // if (change > 0)
-        // {
-        //     // Red for up (涨红) - brighter red for dark theme
-        //     return isDarkTheme ? QColor(255, 85, 85) : QColor(220, 20, 60);
-        // }
-        // else if (change < 0)
-        // {
-        //     // Green for down (跌绿) - brighter green for dark theme
-        //     return isDarkTheme ? QColor(85, 255, 85) : QColor(34, 139, 34);
-        // }
-        // else
-        // {
-        //     // Gray for flat (平灰) - lighter gray for dark theme
-        //     return isDarkTheme ? QColor(180, 180, 180) : QColor(128, 128, 128);
-        // }
-        return {};
-    }
-
-    QColor getDefaultTextColor() const
-    {
-        // // Use enum to detect current theme
-        // auto isDarkTheme = ConfigManager::instance().getConfig().theme == "dark";
-        // if (isDarkTheme)
-        // {
-        //     return QColor(255, 255, 255);  // White for dark theme
-        // }
-        // else
-        // {
-        //     return QColor(0, 0, 0);  // Black for light theme
-        // }
-        return {};
-    }
-
 private:
     std::shared_ptr<StockConfig> config_;
+    QMap<QString, StockInfo> stocks_;
 };

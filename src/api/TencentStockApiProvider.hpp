@@ -19,9 +19,14 @@ class TencentStockApiProvider : public IStockApiProvider
 public:
     explicit TencentStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , m_networkManager(new QNetworkAccessManager(this))
+        , netmgr_(new QNetworkAccessManager(this))
         , m_expectedReplies(0)
     {
+    }
+
+    QString name() const override
+    {
+        return "tencent";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -34,7 +39,7 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "https://gu.qq.com");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onSearchFinished);
     }
 
@@ -59,7 +64,7 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "https://gu.qq.com");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
         m_pendingReplies.append(reply);
@@ -84,7 +89,7 @@ private slots:
         }
 
         QString response = QString::fromUtf8(reply->readAll());
-        QList<StockSearchResult> results = parseTencentSearchData(response);
+        QList<StockInfo> results = parseTencentSearchData(response);
         emit searchCompleted(results);
     }
 
@@ -137,9 +142,9 @@ private:
         return upperCode.toLower();
     }
 
-    QList<StockSearchResult> parseTencentSearchData(const QString &response)
+    QList<StockInfo> parseTencentSearchData(const QString &response)
     {
-        QList<StockSearchResult> results;
+        QList<StockInfo> results;
 
         // 腾讯搜索返回格式: v_hint="sh000001~上证指数~000001~1~SZZS";
         QRegularExpression pattern("\"([^\"]+)\"");
@@ -163,7 +168,7 @@ private:
                     if (!code.isEmpty() && !name.isEmpty())
                     {
                         QString market = fullCode.startsWith("sh") ? "SH" : "SZ";
-                        StockSearchResult result(code, name, market, type);
+                        StockInfo result(code, name);
                         results.append(result);
                     }
                 }
@@ -246,7 +251,7 @@ private:
         return stockInfo;
     }
 
-    QNetworkAccessManager *m_networkManager;
+    QNetworkAccessManager *netmgr_;
     QList<QNetworkReply *> m_pendingReplies;
     QStringList m_pendingCodes;
     QList<StockInfo> m_pendingStockInfos;

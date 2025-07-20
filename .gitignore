@@ -1,4 +1,6 @@
 /.vs
 /.vscode
+/.cache
+/.kiro
 /[bB]uild
-/[oO]out
+/[oO]ut

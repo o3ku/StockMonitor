@@ -19,9 +19,14 @@ class EasyMoneyStockApiProvider : public IStockApiProvider
 public:
     explicit EasyMoneyStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , m_networkManager(new QNetworkAccessManager(this))
+        , netmgr_(new QNetworkAccessManager(this))
         , m_expectedReplies(0)
     {
+    }
+
+    QString name() const override
+    {
+        return "easymoney";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -35,7 +40,7 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &EasyMoneyStockApiProvider::onSearchFinished);
     }
 
@@ -43,7 +48,6 @@ public:
     {
         m_pendingCodes = codes;
         m_pendingStockInfos.clear();
-        m_pendingReplies.clear();
         m_expectedReplies = codes.size();
 
         QStringList formattedCodes;
@@ -63,10 +67,9 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
-        m_pendingReplies.append(reply);
         connect(reply, &QNetworkReply::finished, this, &EasyMoneyStockApiProvider::onStockInfosFinished);
     }
 
@@ -88,7 +91,7 @@ private slots:
         }
 
         QString response = QString::fromUtf8(reply->readAll());
-        QList<StockSearchResult> results = parseEasyMoneySearchData(response);
+        QList<StockInfo> results = parseEasyMoneySearchData(response);
         emit searchCompleted(results);
     }
 
@@ -99,7 +102,6 @@ private slots:
 
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
-        m_pendingReplies.removeOne(reply);
 
         if (reply->error() == QNetworkReply::NoError)
         {
@@ -109,12 +111,6 @@ private slots:
         }
 
         reply->deleteLater();
-
-        if (m_pendingReplies.isEmpty())
-        {
-            emit stockInfosReceived(m_pendingStockInfos);
-            m_pendingStockInfos.clear();
-        }
     }
 
 private:
@@ -143,9 +139,9 @@ private:
         return upperCode;
     }
 
-    QList<StockSearchResult> parseEasyMoneySearchData(const QString &response)
+    QList<StockInfo> parseEasyMoneySearchData(const QString &response)
     {
-        QList<StockSearchResult> results;
+        QList<StockInfo> results;
 
         QJsonParseError error;
         QJsonDocument doc = QJsonDocument::fromJson(response.toUtf8(), &error);
@@ -174,7 +170,7 @@ private:
 
                         if (!code.isEmpty() && !name.isEmpty())
                         {
-                            StockSearchResult result(code, name, market, "stock");
+                            StockInfo result(code, name);
                             results.append(result);
                         }
                     }
@@ -271,8 +267,7 @@ private:
         return stockInfo;
     }
 
-    QNetworkAccessManager *m_networkManager;
-    QList<QNetworkReply *> m_pendingReplies;
+    QNetworkAccessManager *netmgr_;
     QStringList m_pendingCodes;
     QList<StockInfo> m_pendingStockInfos;
     int m_expectedReplies;

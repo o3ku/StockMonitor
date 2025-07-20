@@ -5,7 +5,7 @@ if not exist build mkdir build
 cd build
 
 echo Configuring with CMake...
-cmake .. -G "Visual Studio 17 2022" -A x64
+cmake .. -G "Visual Studio 17 2019" -A x64
 
 if %errorlevel% neq 0 (
     echo CMake configuration failed!

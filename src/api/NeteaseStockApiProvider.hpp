@@ -19,9 +19,14 @@ class NeteaseStockApiProvider : public IStockApiProvider
 public:
     explicit NeteaseStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , m_networkManager(new QNetworkAccessManager(this))
+        , netmgr_(new QNetworkAccessManager(this))
         , m_expectedReplies(0)
     {
+    }
+
+    QString name() const override
+    {
+        return "netease";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -34,7 +39,7 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "http://quotes.money.163.com");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &NeteaseStockApiProvider::onSearchFinished);
     }
 
@@ -59,7 +64,7 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "http://quotes.money.163.com");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
         m_pendingReplies.append(reply);
@@ -84,7 +89,7 @@ private slots:
         }
 
         QString response = QString::fromUtf8(reply->readAll());
-        QList<StockSearchResult> results = parseNeteaseSearchData(response);
+        QList<StockInfo> results = parseNeteaseSearchData(response);
         emit searchCompleted(results);
     }
 
@@ -137,9 +142,9 @@ private:
         return upperCode;
     }
 
-    QList<StockSearchResult> parseNeteaseSearchData(const QString &response)
+    QList<StockInfo> parseNeteaseSearchData(const QString &response)
     {
-        QList<StockSearchResult> results;
+        QList<StockInfo> results;
 
         // 网易搜索返回JSON格式
         QJsonParseError error;
@@ -166,7 +171,7 @@ private:
 
                     if (!code.isEmpty() && !name.isEmpty())
                     {
-                        StockSearchResult result(code, name, market, "stock");
+                        StockInfo result(code, name);
                         results.append(result);
                     }
                 }
@@ -249,7 +254,7 @@ private:
         return stockInfo;
     }
 
-    QNetworkAccessManager *m_networkManager;
+    QNetworkAccessManager *netmgr_;
     QList<QNetworkReply *> m_pendingReplies;
     QStringList m_pendingCodes;
     QList<StockInfo> m_pendingStockInfos;

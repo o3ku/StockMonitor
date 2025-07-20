@@ -16,9 +16,12 @@ class SinaStockApiProvider : public IStockApiProvider
 public:
     explicit SinaStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , m_networkManager(new QNetworkAccessManager(this))
-        , m_expectedReplies(0)
     {
+    }
+
+    QString name() const override
+    {
+        return "sina";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -31,16 +34,12 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "https://finance.sina.com.cn");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &SinaStockApiProvider::onSearchFinished);
     }
 
     void getStockInfosAsync(const QStringList &codes) override
     {
-        m_pendingCodes = codes;
-        m_pendingStockInfos.clear();
-        m_pendingReplies.clear();
-        m_expectedReplies = codes.size();
 
         QStringList formattedCodes;
         for (const QString &code : codes)
@@ -56,10 +55,9 @@ public:
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "https://finance.sina.com.cn");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
-        m_pendingReplies.append(reply);
         connect(reply, &QNetworkReply::finished, this, &SinaStockApiProvider::onStockInfosFinished);
     }
 
@@ -71,7 +69,6 @@ private slots:
         {
             return;
         }
-
         reply->deleteLater();
 
         if (reply->error() != QNetworkReply::NoError)
@@ -81,7 +78,7 @@ private slots:
         }
 
         QString response = QString::fromLocal8Bit(reply->readAll());
-        QList<StockSearchResult> results = parseSinaSearchData(response);
+        QList<StockInfo> results = parseSinaSearchData(response);
         emit searchCompleted(results);
     }
 
@@ -92,22 +89,15 @@ private slots:
 
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
-        m_pendingReplies.removeOne(reply);
 
         if (reply->error() == QNetworkReply::NoError)
         {
             QString response = QString::fromLocal8Bit(reply->readAll());
             QList<StockInfo> stockInfos = parseSinaBatchStockData(stockCodes, formattedCodes, response);
-            m_pendingStockInfos.append(stockInfos);
+            emit stockInfosReceived(stockInfos);
         }
 
         reply->deleteLater();
-
-        if (m_pendingReplies.isEmpty())
-        {
-            emit stockInfosReceived(m_pendingStockInfos);
-            m_pendingStockInfos.clear();
-        }
     }
 
 private:
@@ -134,9 +124,9 @@ private:
         return upperCode.toLower();
     }
 
-    QList<StockSearchResult> parseSinaSearchData(const QString &response)
+    QList<StockInfo> parseSinaSearchData(const QString &response)
     {
-        QList<StockSearchResult> results;
+        QList<StockInfo> results;
 
         QRegularExpression pattern("var suggestvalue=\"([^\"]+)\"");
         QRegularExpressionMatch match = pattern.match(response);
@@ -158,7 +148,7 @@ private:
 
                     if (!code.isEmpty() && !name.isEmpty())
                     {
-                        StockSearchResult result(code, name, market, type);
+                        StockInfo result(code, name);
                         results.append(result);
                     }
                 }
@@ -238,13 +228,6 @@ private:
                 stockInfo.setLastUpdate(QDateTime::currentDateTime());
             }
         }
-
         return stockInfo;
     }
-
-    QNetworkAccessManager *m_networkManager;
-    QList<QNetworkReply *> m_pendingReplies;
-    QStringList m_pendingCodes;
-    QList<StockInfo> m_pendingStockInfos;
-    int m_expectedReplies;
 };

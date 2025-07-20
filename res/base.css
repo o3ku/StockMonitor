@@ -18,13 +18,12 @@ QWidget#titleBar {
     border-radius: 15px;
 }
 
-/* Search Widget Styles */
-#titleBar QLineEdit {
-    padding: 5px;
+#searchInput {
+    padding: 5px 3px;
     border: 1px solid;
 }
 
-#titleBar QLineEdit:focus {
+#searchInput:focus {
     outline: none;
 }
 

@@ -177,7 +177,7 @@ public:
 
     bool isUp() const
     {
-        return m_change >= 0;
+        return m_change > 0;
     }
 
     QString changeText() const

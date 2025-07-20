@@ -20,7 +20,6 @@ struct StockConfig
     int refreshInterval{ 5000 };
 
     QStringList availableThemes{ "light", "dark" };
-    QMap<QString, StockInfo> stocks;
 
     StockConfig()
         : filepath_(QString("%1/stocks.ini").arg(QApplication::applicationDirPath()))
@@ -61,9 +60,9 @@ struct StockConfig
         return theme == "dark";
     }
 
-    QColor getPriceColor(bool rise) const
+    QColor getPriceColor(bool up) const
     {
-        if (rise)
+        if (up)
         {
             return isDarkTheme() ? QColor(255, 85, 85) : QColor(220, 20, 60);
         }

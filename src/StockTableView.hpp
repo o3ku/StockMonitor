@@ -14,6 +14,7 @@
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QStyledItemDelegate>
@@ -51,39 +52,33 @@ class StockTableView : public QTableView
     Q_OBJECT
 
 public:
-    explicit StockTableView(QWidget *parent = nullptr)
+    explicit StockTableView(const std::shared_ptr<StockConfig> &config, QWidget *parent = nullptr)
         : QTableView(parent)
+        , model_(new StockModel(config, this))
         , m_dropIndicatorRow(-1)
     {
         setupView();
         setupContextMenu();
-        setColumnWidth(StockModel::NameColumn, 90);
-        setColumnWidth(StockModel::CurrentPriceColumn, 80);
-        setColumnWidth(StockModel::ChangePercentColumn, 70);
 
-        // Connect model signals
-        // connect(m_stockModel, &StockModel::stockListChanged, this, &StockTableView::stockListChanged);
+        setModel(model_);
+        for (auto i = 0; i < model_->columnCount(); ++i)
+        {
+            setColumnWidth(i, model_->width(i));
+        }
+
+        connect(this, &QTableView::customContextMenuRequested, this, [this](auto &&pos) {
+            menu_->exec(QCursor::pos());
+        });
     }
 
-    void addStock(const StockInfo &stock)
+    void addStock(const QString &stock)
     {
-        // // Check if stock already exists
-        // QList<StockInfo> existingStocks = m_stockModel->stockData();
-        // for (const StockInfo &existingStock : existingStocks)
-        // {
-        //     if (existingStock.code() == stock.code())
-        //     {
-        //         QMessageBox::information(this, "Information", QString("Stock %1 already exists!").arg(stock.code()));
-        //         return;
-        //     }
-        // }
-
-        // m_stockModel->addStock(stock);
+        model_->addStock(stock);
     }
 
-    void updateStockData(const QList<StockInfo> &newData)
+    void updateStocksDetail(const QList<StockInfo> &arr)
     {
-        // m_stockModel->updateStockData(newData);
+        model_->updateStocksDetail(arr);
     }
 
     QList<StockInfo> stockData() const
@@ -250,8 +245,8 @@ private slots:
         if (currentIndex.isValid() && currentIndex.row() > 0)
         {
             int currentRow = currentIndex.row();
-            // m_stockModel->moveStock(currentRow, currentRow - 1);
-            // setCurrentIndex(m_stockModel->index(currentRow - 1, 0));
+            model_->moveStock(currentRow, currentRow - 1);
+            setCurrentIndex(model_->index(currentRow - 1, 0));
         }
     }
 
@@ -292,7 +287,6 @@ private slots:
 private:
     void setupView()
     {
-        // Set selection behavior
         setSelectionBehavior(QAbstractItemView::SelectRows);
         setSelectionMode(QAbstractItemView::SingleSelection);
 
@@ -301,65 +295,41 @@ private:
         setDefaultDropAction(Qt::MoveAction);
         setDragDropOverwriteMode(false);
 
-        // Set alternating row colors for subtle visual separation
+        setShowGrid(false);
         setAlternatingRowColors(true);
-
-        // Disable editing
         setEditTriggers(QAbstractItemView::NoEditTriggers);
+        setFocusPolicy(Qt::StrongFocus);
+        setSortingEnabled(false);
 
-        // Configure headers
         horizontalHeader()->setStretchLastSection(true);
         horizontalHeader()->setHighlightSections(false);
         horizontalHeader()->setDefaultAlignment(Qt::AlignLeft);
+
         verticalHeader()->setVisible(false);
-
-        // Minimalist grid style - no visible grid lines
-        setShowGrid(false);
-
-        // Enable keyboard focus but remove focus rectangle
-        setFocusPolicy(Qt::StrongFocus);
-
-        // Set sorting
-        setSortingEnabled(false);  // Disable sorting to maintain user order
-
-        // Set compact row height
-
-        // Create a custom item delegate to preserve colors in selected state
-        setItemDelegate(new ColorPreservingDelegate(this));
     }
 
     void setupContextMenu()
     {
-        setContextMenuPolicy(Qt::DefaultContextMenu);
+        setContextMenuPolicy(Qt::CustomContextMenu);
 
-        m_contextMenu = new QMenu(this);
+        menu_ = new QMenu(this);
 
-        // Add move actions first
-        m_moveUpAction = m_contextMenu->addAction("Move Up");
-        m_moveDownAction = m_contextMenu->addAction("Move Down");
-        m_moveToTopAction = m_contextMenu->addAction("Move to Top");
-        m_moveToBottomAction = m_contextMenu->addAction("Move to Bottom");
-
-        // Add separator
-        m_contextMenu->addSeparator();
-
-        // Add delete action
-        m_deleteAction = m_contextMenu->addAction("Delete");
-
-        // Connect signals
-        connect(m_moveUpAction, &QAction::triggered, this, &StockTableView::onMoveUp);
-        connect(m_moveDownAction, &QAction::triggered, this, &StockTableView::onMoveDown);
-        connect(m_moveToTopAction, &QAction::triggered, this, &StockTableView::onMoveToTop);
-        connect(m_moveToBottomAction, &QAction::triggered, this, &StockTableView::onMoveToBottom);
-        connect(m_deleteAction, &QAction::triggered, this, &StockTableView::onDeleteStock);
+        actUp_ = menu_->addAction("Move Up", this, &StockTableView::onMoveUp);
+        actDown_ = menu_->addAction("Move Down", this, &StockTableView::onMoveDown);
+        actTop_ = menu_->addAction("Move to Top", this, &StockTableView::onMoveToTop);
+        actBottom_ = menu_->addAction("Move to Bottom", this, &StockTableView::onMoveToBottom);
+        menu_->addSeparator();
+        actDelete_ = menu_->addAction("Delete", this, &StockTableView::onDeleteStock);
     }
 
-    QMenu *m_contextMenu;
-    QAction *m_deleteAction;
-    QAction *m_moveUpAction;
-    QAction *m_moveDownAction;
-    QAction *m_moveToTopAction;
-    QAction *m_moveToBottomAction;
+private:
+    StockModel *model_;
+    QMenu *menu_;
+    QAction *actDelete_;
+    QAction *actUp_;
+    QAction *actDown_;
+    QAction *actTop_;
+    QAction *actBottom_;
 
     // Drag and drop indicator
     int m_dropIndicatorRow;

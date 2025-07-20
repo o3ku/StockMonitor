@@ -19,9 +19,14 @@ class XueqiuStockApiProvider : public IStockApiProvider
 public:
     explicit XueqiuStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , m_networkManager(new QNetworkAccessManager(this))
+        , netmgr_(new QNetworkAccessManager(this))
         , m_expectedReplies(0)
     {
+    }
+
+    QString name() const override
+    {
+        return "xueqiu";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -35,7 +40,7 @@ public:
         request.setRawHeader("Referer", "https://xueqiu.com");
         request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &XueqiuStockApiProvider::onSearchFinished);
     }
 
@@ -61,7 +66,7 @@ public:
         request.setRawHeader("Referer", "https://xueqiu.com");
         request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
-        QNetworkReply *reply = m_networkManager->get(request);
+        QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
         m_pendingReplies.append(reply);
@@ -86,7 +91,7 @@ private slots:
         }
 
         QString response = QString::fromUtf8(reply->readAll());
-        QList<StockSearchResult> results = parseXueqiuSearchData(response);
+        QList<StockInfo> results = parseXueqiuSearchData(response);
         emit searchCompleted(results);
     }
 
@@ -141,9 +146,9 @@ private:
         return upperCode;
     }
 
-    QList<StockSearchResult> parseXueqiuSearchData(const QString &response)
+    QList<StockInfo> parseXueqiuSearchData(const QString &response)
     {
-        QList<StockSearchResult> results;
+        QList<StockInfo> results;
 
         QJsonParseError error;
         QJsonDocument doc = QJsonDocument::fromJson(response.toUtf8(), &error);
@@ -186,7 +191,7 @@ private:
 
                     if (!code.isEmpty() && !name.isEmpty())
                     {
-                        StockSearchResult result(code, name, market, "stock");
+                        StockInfo result(code, name);
                         results.append(result);
                     }
                 }
@@ -286,7 +291,7 @@ private:
         return stockInfo;
     }
 
-    QNetworkAccessManager *m_networkManager;
+    QNetworkAccessManager *netmgr_;
     QList<QNetworkReply *> m_pendingReplies;
     QStringList m_pendingCodes;
     QList<StockInfo> m_pendingStockInfos;

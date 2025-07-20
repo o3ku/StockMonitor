@@ -15,9 +15,10 @@ class StockApiService : public QObject
     Q_OBJECT
 
 public:
-    explicit StockApiService(const QString &api, QObject *parent = nullptr)
-        : QObject(parent)
+    static StockApiService &instance()
     {
+        static StockApiService inst;
+        return inst;
     }
 
     IStockApiProvider *get(const QString &src)
@@ -25,6 +26,10 @@ public:
         Q_ASSERT(apis_.contains(src));
         return apis_.value(src)();
     }
+
+private:
+    StockApiService() = default;
+    ~StockApiService() = default;
 
 private:
     QMap<QString, std::function<IStockApiProvider *()>> apis_{

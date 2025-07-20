@@ -1,11 +1,10 @@
 #pragma once
 
+#include "StockInfo.hpp"
 #include <QList>
+#include <QNetworkAccessManager>
 #include <QObject>
 #include <QString>
-
-#include "StockInfo.hpp"
-#include "StockSearchResult.hpp"
 
 // Abstract interface for stock API providers
 class IStockApiProvider : public QObject
@@ -15,14 +14,19 @@ class IStockApiProvider : public QObject
 public:
     explicit IStockApiProvider(QObject *parent = nullptr)
         : QObject(parent)
+        , netmgr_(new QNetworkAccessManager(this))
     {
     }
     virtual ~IStockApiProvider() = default;
+    virtual QString name() const = 0;
     virtual void searchStocksAsync(const QString &keyword) = 0;
     virtual void getStockInfosAsync(const QStringList &codes) = 0;
 
 signals:
-    void searchCompleted(const QList<StockSearchResult> &results);
+    void searchCompleted(const QList<StockInfo> &results);
     void stockInfosReceived(const QList<StockInfo> &stockInfos);
     void errorOccurred(const QString &error);
+
+protected:
+    QNetworkAccessManager *netmgr_;
 };

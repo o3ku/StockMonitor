@@ -28,13 +28,12 @@ QWidget#titleBar {
 
 
 /* Search Widget Colors */
-#titleBar QLineEdit {
+#searchInput {
     background-color: white;
     border-color: #ced4da;
     color: #000;
 }
-
-#titleBar QLineEdit:focus {
+#searchInput:focus {
     border-color: #80bdff;
 }
 
