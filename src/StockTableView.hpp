@@ -66,8 +66,24 @@ public:
             setColumnWidth(i, model_->width(i));
         }
 
-        connect(this, &QTableView::customContextMenuRequested, this, [this](auto &&pos) {
-            menu_->exec(QCursor::pos());
+        connect(this, &QTableView::customContextMenuRequested, this, [this](const QPoint &pos) {
+            QModelIndex index = indexAt(pos);
+            if (index.isValid())
+            {
+                setCurrentIndex(index);
+
+                // Update action states
+                int row = index.row();
+                int rowCount = model_->rowCount();
+
+                // Enable/disable move actions based on current position
+                actUp_->setEnabled(row > 0);
+                actDown_->setEnabled(row < rowCount - 1);
+                actTop_->setEnabled(row > 0);
+                actBottom_->setEnabled(row < rowCount - 1);
+
+                menu_->exec(mapToGlobal(pos));
+            }
         });
     }
 
@@ -83,13 +99,12 @@ public:
 
     QList<StockInfo> stockData() const
     {
-        // return m_stockModel->stockData();
-        return {};
+        return model_->stockData();
     }
 
     void setStockData(const QList<StockInfo> &stockData)
     {
-        // m_stockModel->setStockData(stockData);
+        // Implementation if needed
     }
 
 signals:
@@ -191,27 +206,6 @@ protected:
         QTableView::dropEvent(event);
     }
 
-    void contextMenuEvent(QContextMenuEvent *event) override
-    {
-        QModelIndex index = indexAt(event->pos());
-        if (index.isValid())
-        {
-            // setCurrentIndex(index);
-
-            // // Update action states
-            // int row = index.row();
-            // int rowCount = m_stockModel->rowCount();
-
-            // // Enable/disable move actions based on current position
-            // m_moveUpAction->setEnabled(row > 0);
-            // m_moveDownAction->setEnabled(row < rowCount - 1);
-            // m_moveToTopAction->setEnabled(row > 0);
-            // m_moveToBottomAction->setEnabled(row < rowCount - 1);
-
-            // m_contextMenu->exec(event->globalPos());
-        }
-    }
-
     void keyPressEvent(QKeyEvent *event) override
     {
         if (event->key() == Qt::Key_Delete)
@@ -235,7 +229,7 @@ private slots:
         QModelIndex currentIndex = this->currentIndex();
         if (currentIndex.isValid())
         {
-            // m_stockModel->removeStock(currentIndex.row());
+            model_->removeStock(currentIndex.row());
         }
     }
 
@@ -252,13 +246,13 @@ private slots:
 
     void onMoveDown()
     {
-        // QModelIndex currentIndex = this->currentIndex();
-        // if (currentIndex.isValid() && currentIndex.row() < m_stockModel->rowCount() - 1)
-        // {
-        //     int currentRow = currentIndex.row();
-        //     m_stockModel->moveStock(currentRow, currentRow + 1);
-        //     setCurrentIndex(m_stockModel->index(currentRow + 1, 0));
-        // }
+        QModelIndex currentIndex = this->currentIndex();
+        if (currentIndex.isValid() && currentIndex.row() < model_->rowCount() - 1)
+        {
+            int currentRow = currentIndex.row();
+            model_->moveStock(currentRow, currentRow + 1);
+            setCurrentIndex(model_->index(currentRow + 1, 0));
+        }
     }
 
     void onMoveToTop()
@@ -266,22 +260,22 @@ private slots:
         QModelIndex currentIndex = this->currentIndex();
         if (currentIndex.isValid() && currentIndex.row() > 0)
         {
-            // int currentRow = currentIndex.row();
-            // m_stockModel->moveStock(currentRow, 0);
-            // setCurrentIndex(m_stockModel->index(0, 0));
+            int currentRow = currentIndex.row();
+            model_->moveStock(currentRow, 0);
+            setCurrentIndex(model_->index(0, 0));
         }
     }
 
     void onMoveToBottom()
     {
-        // QModelIndex currentIndex = this->currentIndex();
-        // if (currentIndex.isValid() && currentIndex.row() < m_stockModel->rowCount() - 1)
-        // {
-        //     int currentRow = currentIndex.row();
-        //     int lastRow = m_stockModel->rowCount() - 1;
-        //     m_stockModel->moveStock(currentRow, lastRow);
-        //     setCurrentIndex(m_stockModel->index(lastRow, 0));
-        // }
+        QModelIndex currentIndex = this->currentIndex();
+        if (currentIndex.isValid() && currentIndex.row() < model_->rowCount() - 1)
+        {
+            int currentRow = currentIndex.row();
+            int lastRow = model_->rowCount() - 1;
+            model_->moveStock(currentRow, lastRow);
+            setCurrentIndex(model_->index(lastRow, 0));
+        }
     }
 
 private:
