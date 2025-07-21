@@ -19,9 +19,9 @@ class XueqiuStockApiProvider : public IStockApiProvider
 public:
     explicit XueqiuStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , netmgr_(new QNetworkAccessManager(this))
-        , m_expectedReplies(0)
     {
+        // 雪球API需要先获取cookie
+        initCookies();
     }
 
     QString name() const override
@@ -32,13 +32,20 @@ public:
     void searchStocksAsync(const QString &keyword) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
-        QString url = QString("https://xueqiu.com/stock/search.json?code=%1&size=20&key=%1&market=CN").arg(encodedKeyword);
+        QString url = QString("https://xueqiu.com/query/v1/search/stock.json?q=%1&size=20&page=1").arg(encodedKeyword);
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "https://xueqiu.com");
-        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        
+        // 添加cookie
+        QMapIterator<QByteArray, QByteArray> it(cookies_);
+        while (it.hasNext()) {
+            it.next();
+            request.setRawHeader(it.key(), it.value());
+        }
 
         QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &XueqiuStockApiProvider::onSearchFinished);
@@ -46,11 +53,6 @@ public:
 
     void getStockInfosAsync(const QStringList &codes) override
     {
-        m_pendingCodes = codes;
-        m_pendingStockInfos.clear();
-        m_pendingReplies.clear();
-        m_expectedReplies = codes.size();
-
         QStringList formattedCodes;
         for (const QString &code : codes)
         {
@@ -64,12 +66,18 @@ public:
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         request.setRawHeader("Referer", "https://xueqiu.com");
-        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        
+        // 添加cookie
+        QMapIterator<QByteArray, QByteArray> it(cookies_);
+        while (it.hasNext()) {
+            it.next();
+            request.setRawHeader(it.key(), it.value());
+        }
 
         QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
-        m_pendingReplies.append(reply);
         connect(reply, &QNetworkReply::finished, this, &XueqiuStockApiProvider::onStockInfosFinished);
     }
 
@@ -90,6 +98,9 @@ private slots:
             return;
         }
 
+        // 保存cookie
+        saveCookies(reply);
+
         QString response = QString::fromUtf8(reply->readAll());
         QList<StockInfo> results = parseXueqiuSearchData(response);
         emit searchCompleted(results);
@@ -102,28 +113,90 @@ private slots:
 
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
-        m_pendingReplies.removeOne(reply);
-
+        
+        QList<StockInfo> stockInfos;
+        
         if (reply->error() == QNetworkReply::NoError)
         {
+            // 保存cookie
+            saveCookies(reply);
+            
             QString response = QString::fromUtf8(reply->readAll());
-            QList<StockInfo> stockInfos = parseXueqiuBatchStockData(stockCodes, formattedCodes, response);
-            m_pendingStockInfos.append(stockInfos);
+            stockInfos = parseXueqiuBatchStockData(stockCodes, formattedCodes, response);
         }
-
-        reply->deleteLater();
-
-        if (m_pendingReplies.isEmpty())
+        else
         {
-            emit stockInfosReceived(m_pendingStockInfos);
-            m_pendingStockInfos.clear();
+            emit errorOccurred(QString("Xueqiu API Error: %1").arg(reply->errorString()));
+            
+            // 如果是认证错误，尝试重新获取cookie
+            if (reply->error() == QNetworkReply::AuthenticationRequiredError ||
+                reply->error() == QNetworkReply::ContentAccessDenied ||
+                reply->error() == QNetworkReply::ContentOperationNotPermittedError) {
+                initCookies();
+            }
         }
+        
+        reply->deleteLater();
+        emit stockInfosReceived(stockInfos);
+    }
+    
+    void onInitCookiesFinished()
+    {
+        QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+        if (!reply) return;
+        
+        saveCookies(reply);
+        reply->deleteLater();
     }
 
 private:
+    void initCookies()
+    {
+        // 访问雪球首页获取cookie
+        QNetworkRequest request;
+        request.setUrl(QUrl("https://xueqiu.com"));
+        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        
+        QNetworkReply *reply = netmgr_->get(request);
+        connect(reply, &QNetworkReply::finished, this, &XueqiuStockApiProvider::onInitCookiesFinished);
+    }
+    
+    void saveCookies(QNetworkReply *reply)
+    {
+        QList<QNetworkReply::RawHeaderPair> headers = reply->rawHeaderPairs();
+        for (const auto& header : headers) {
+            if (QString(header.first).toLower() == "set-cookie") {
+                QByteArray cookieValue = header.second;
+                int endPos = cookieValue.indexOf(';');
+                if (endPos > 0) {
+                    QByteArray cookiePair = cookieValue.left(endPos);
+                    int eqPos = cookiePair.indexOf('=');
+                    if (eqPos > 0) {
+                        QByteArray cookieName = cookiePair.left(eqPos);
+                        QByteArray cookieVal = cookiePair.mid(eqPos + 1);
+                        cookies_[cookieName] = cookieVal;
+                    }
+                }
+            }
+        }
+    }
+
     QString formatStockCode(const QString &code)
     {
         QString upperCode = code.toUpper();
+
+        if (upperCode.startsWith("SZ") || upperCode.startsWith("SH"))
+        {
+            // 已经是带市场前缀的代码，转换为雪球格式
+            if (upperCode.startsWith("SZ"))
+            {
+                return QString("SZ%1").arg(upperCode.mid(2));
+            }
+            else if (upperCode.startsWith("SH"))
+            {
+                return QString("SH%1").arg(upperCode.mid(2));
+            }
+        }
 
         if (upperCode.length() == 6)
         {
@@ -135,12 +208,6 @@ private:
             {
                 return QString("SH%1").arg(upperCode);  // 上海
             }
-        }
-
-        // 如果已经是格式化的代码
-        if (upperCode.startsWith("SH") || upperCode.startsWith("SZ"))
-        {
-            return upperCode;
         }
 
         return upperCode;
@@ -155,44 +222,50 @@ private:
 
         if (error.error != QJsonParseError::NoError)
         {
+            emit errorOccurred(QString("Xueqiu search parse error: %1").arg(error.errorString()));
             return results;
         }
 
         if (doc.isObject())
         {
             QJsonObject obj = doc.object();
-            if (obj.contains("stocks"))
+            if (obj.contains("data") && obj["data"].isObject())
             {
-                QJsonArray stocksArray = obj["stocks"].toArray();
-
-                for (const QJsonValue &value : stocksArray)
+                QJsonObject dataObj = obj["data"].toObject();
+                if (dataObj.contains("stocks") && dataObj["stocks"].isArray())
                 {
-                    QJsonObject stockObj = value.toObject();
-                    QString symbol = stockObj["symbol"].toString();
-                    QString name = stockObj["name"].toString();
+                    QJsonArray stocksArray = dataObj["stocks"].toArray();
 
-                    // 从symbol中提取代码和市场
-                    QString code, market;
-                    if (symbol.startsWith("SH"))
+                    for (const QJsonValue &value : stocksArray)
                     {
-                        code = symbol.mid(2);
-                        market = "SH";
-                    }
-                    else if (symbol.startsWith("SZ"))
-                    {
-                        code = symbol.mid(2);
-                        market = "SZ";
-                    }
-                    else
-                    {
-                        code = symbol;
-                        market = "Unknown";
-                    }
+                        QJsonObject stockObj = value.toObject();
+                        QString symbol = stockObj["symbol"].toString();
+                        QString name = stockObj["name"].toString();
 
-                    if (!code.isEmpty() && !name.isEmpty())
-                    {
-                        StockInfo result(code, name);
-                        results.append(result);
+                        // 从symbol中提取代码和市场
+                        QString code, market;
+                        if (symbol.startsWith("SH"))
+                        {
+                            code = symbol.mid(2);
+                            market = "SH";
+                        }
+                        else if (symbol.startsWith("SZ"))
+                        {
+                            code = symbol.mid(2);
+                            market = "SZ";
+                        }
+                        else
+                        {
+                            code = symbol;
+                            market = "Unknown";
+                        }
+
+                        if (!code.isEmpty() && !name.isEmpty())
+                        {
+                            QString standardCode = market + code;
+                            StockInfo result(standardCode, name);
+                            results.append(result);
+                        }
                     }
                 }
             }
@@ -210,6 +283,7 @@ private:
 
         if (error.error != QJsonParseError::NoError)
         {
+            emit errorOccurred(QString("Xueqiu data parse error: %1").arg(error.errorString()));
             return stockInfos;
         }
 
@@ -219,11 +293,11 @@ private:
             if (rootObj.contains("data") && rootObj["data"].isObject())
             {
                 QJsonObject dataObj = rootObj["data"].toObject();
-                if (dataObj.contains("items"))
+                if (dataObj.contains("items") && dataObj["items"].isArray())
                 {
                     QJsonArray itemsArray = dataObj["items"].toArray();
 
-                    for (int i = 0; i < originalCodes.size(); ++i)
+                    for (int i = 0; i < originalCodes.size() && i < formattedCodes.size(); ++i)
                     {
                         const QString &originalCode = originalCodes[i];
                         const QString &formattedCode = formattedCodes[i];
@@ -231,7 +305,7 @@ private:
                         for (const QJsonValue &value : itemsArray)
                         {
                             QJsonObject stockObj = value.toObject();
-                            if (stockObj.contains("quote"))
+                            if (stockObj.contains("quote") && stockObj["quote"].isObject())
                             {
                                 QJsonObject quoteObj = stockObj["quote"].toObject();
                                 QString symbol = quoteObj["symbol"].toString();
@@ -263,7 +337,7 @@ private:
         stockInfo.setName(quoteObj["name"].toString());
         stockInfo.setCurrentPrice(quoteObj["current"].toDouble());
         stockInfo.setChange(quoteObj["chg"].toDouble());
-        stockInfo.setChangePercent(quoteObj["percent"].toDouble());
+        stockInfo.setChangePercent(quoteObj["percent"].toDouble() * 100); // 雪球返回的是小数，需要转换为百分比
         stockInfo.setHigh(quoteObj["high"].toDouble());
         stockInfo.setLow(quoteObj["low"].toDouble());
         stockInfo.setOpenPrice(quoteObj["open"].toDouble());
@@ -271,11 +345,25 @@ private:
         stockInfo.setVolume(quoteObj["volume"].toVariant().toLongLong());
         stockInfo.setTurnover(quoteObj["amount"].toDouble());
 
-        // 雪球可能没有买卖盘数据，设置为0
-        stockInfo.setBid1(0.0);
-        stockInfo.setAsk1(0.0);
-        stockInfo.setBid1Volume(0);
-        stockInfo.setAsk1Volume(0);
+        // 雪球可能没有买卖盘数据，设置为0或从其他字段获取
+        if (quoteObj.contains("bid") && quoteObj.contains("ask")) {
+            stockInfo.setBid1(quoteObj["bid"].toDouble());
+            stockInfo.setAsk1(quoteObj["ask"].toDouble());
+            
+            // 尝试获取买卖盘量
+            if (quoteObj.contains("bid_volume") && quoteObj.contains("ask_volume")) {
+                stockInfo.setBid1Volume(quoteObj["bid_volume"].toVariant().toLongLong());
+                stockInfo.setAsk1Volume(quoteObj["ask_volume"].toVariant().toLongLong());
+            } else {
+                stockInfo.setBid1Volume(0);
+                stockInfo.setAsk1Volume(0);
+            }
+        } else {
+            stockInfo.setBid1(0.0);
+            stockInfo.setAsk1(0.0);
+            stockInfo.setBid1Volume(0);
+            stockInfo.setAsk1Volume(0);
+        }
 
         // 时间戳转换
         qint64 timestamp = quoteObj["timestamp"].toVariant().toLongLong();
@@ -285,15 +373,18 @@ private:
             stockInfo.setTradeDate(dateTime.toString("yyyy-MM-dd"));
             stockInfo.setTradeTime(dateTime.toString("HH:mm:ss"));
         }
+        else
+        {
+            QDateTime now = QDateTime::currentDateTime();
+            stockInfo.setTradeDate(now.toString("yyyy-MM-dd"));
+            stockInfo.setTradeTime(now.toString("HH:mm:ss"));
+        }
 
         stockInfo.setLastUpdate(QDateTime::currentDateTime());
 
         return stockInfo;
     }
-
-    QNetworkAccessManager *netmgr_;
-    QList<QNetworkReply *> m_pendingReplies;
-    QStringList m_pendingCodes;
-    QList<StockInfo> m_pendingStockInfos;
-    int m_expectedReplies;
+    
+private:
+    QMap<QByteArray, QByteArray> cookies_;
 };

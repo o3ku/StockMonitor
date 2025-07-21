@@ -14,7 +14,7 @@ struct StockConfig
 {
     QStringList stockCodes;
     QString apiSource;
-    QString hotkeyKey{ "Ctrl+Alt+S" };
+    QString hotkey{ "Ctrl+Alt+S" };
     QString theme{ "light" };
     qreal windowOpacity{ 1.0 };
     int refreshInterval{ 5000 };
@@ -35,7 +35,7 @@ struct StockConfig
         refreshInterval = settings.value("RefreshInterval", 5000).toInt();
         settings.endGroup();
 
-        hotkeyKey = settings.value("Hotkey/Global", "Ctrl+Alt+S").toString();
+        hotkey = settings.value("Hotkey/Global", "Ctrl+Alt+S").toString();
     }
 
     ~StockConfig()
@@ -56,7 +56,7 @@ struct StockConfig
         settings.setValue("RefreshInterval", refreshInterval);
         settings.endGroup();
 
-        settings.setValue("Hotkey/Global", hotkeyKey);
+        settings.setValue("Hotkey/Global", hotkey);
         settings.sync();
     }
 

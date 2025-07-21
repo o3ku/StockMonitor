@@ -19,8 +19,6 @@ class NeteaseStockApiProvider : public IStockApiProvider
 public:
     explicit NeteaseStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , netmgr_(new QNetworkAccessManager(this))
-        , m_expectedReplies(0)
     {
     }
 
@@ -32,12 +30,13 @@ public:
     void searchStocksAsync(const QString &keyword) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
-        QString url = QString("http://quotes.money.163.com/stocksearch/json.do?count=20&type=&word=%1").arg(encodedKeyword);
+        QString url = QString("https://quotes.money.163.com/stocksearch/json.do?count=20&type=&word=%1").arg(encodedKeyword);
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        request.setRawHeader("Referer", "http://quotes.money.163.com");
+        request.setRawHeader("Referer", "https://quotes.money.163.com");
+        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
 
         QNetworkReply *reply = netmgr_->get(request);
         connect(reply, &QNetworkReply::finished, this, &NeteaseStockApiProvider::onSearchFinished);
@@ -45,11 +44,6 @@ public:
 
     void getStockInfosAsync(const QStringList &codes) override
     {
-        m_pendingCodes = codes;
-        m_pendingStockInfos.clear();
-        m_pendingReplies.clear();
-        m_expectedReplies = codes.size();
-
         QStringList formattedCodes;
         for (const QString &code : codes)
         {
@@ -57,17 +51,17 @@ public:
             formattedCodes.append(formattedCode);
         }
 
-        QString url = QString("http://api.money.126.net/data/feed/%1").arg(formattedCodes.join(","));
+        QString url = QString("https://api.money.126.net/data/feed/%1,money.api").arg(formattedCodes.join(","));
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        request.setRawHeader("Referer", "http://quotes.money.163.com");
+        request.setRawHeader("Referer", "https://quotes.money.163.com");
+        request.setRawHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
 
         QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
-        m_pendingReplies.append(reply);
         connect(reply, &QNetworkReply::finished, this, &NeteaseStockApiProvider::onStockInfosFinished);
     }
 
@@ -100,22 +94,21 @@ private slots:
 
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
-        m_pendingReplies.removeOne(reply);
-
+        
+        QList<StockInfo> stockInfos;
+        
         if (reply->error() == QNetworkReply::NoError)
         {
             QString response = QString::fromUtf8(reply->readAll());
-            QList<StockInfo> stockInfos = parseNeteaseBatchStockData(stockCodes, formattedCodes, response);
-            m_pendingStockInfos.append(stockInfos);
+            stockInfos = parseNeteaseBatchStockData(stockCodes, formattedCodes, response);
         }
-
-        reply->deleteLater();
-
-        if (m_pendingReplies.isEmpty())
+        else
         {
-            emit stockInfosReceived(m_pendingStockInfos);
-            m_pendingStockInfos.clear();
+            emit errorOccurred(QString("Netease API Error: %1").arg(reply->errorString()));
         }
+        
+        reply->deleteLater();
+        emit stockInfosReceived(stockInfos);
     }
 
 private:
@@ -146,34 +139,51 @@ private:
     {
         QList<StockInfo> results;
 
-        // 网易搜索返回JSON格式
+        // 网易搜索返回格式是JSONP格式，需要先提取JSON部分
+        QRegularExpression jsonpPattern("^[^\\(]*\\((.*)\\)[^\\)]*$");
+        QRegularExpressionMatch jsonpMatch = jsonpPattern.match(response);
+        
+        QString jsonStr;
+        if (jsonpMatch.hasMatch()) {
+            jsonStr = jsonpMatch.captured(1);
+        } else {
+            jsonStr = response; // 尝试直接解析
+        }
+
         QJsonParseError error;
-        QJsonDocument doc = QJsonDocument::fromJson(response.toUtf8(), &error);
+        QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8(), &error);
 
         if (error.error != QJsonParseError::NoError)
         {
+            emit errorOccurred(QString("Netease search parse error: %1").arg(error.errorString()));
             return results;
         }
 
-        if (doc.isObject())
+        if (doc.isArray())
         {
-            QJsonObject obj = doc.object();
-            if (obj.contains("result"))
+            QJsonArray resultArray = doc.array();
+
+            for (const QJsonValue &value : resultArray)
             {
-                QJsonArray resultArray = obj["result"].toArray();
+                QJsonObject stockObj = value.toObject();
+                QString code = stockObj["code"].toString();
+                QString name = stockObj["name"].toString();
+                QString market = stockObj["type"].toString();
+                
+                // 构建标准格式的代码
+                QString standardCode;
+                if (market == "sh") {
+                    standardCode = "SH" + code;
+                } else if (market == "sz") {
+                    standardCode = "SZ" + code;
+                } else {
+                    standardCode = code;
+                }
 
-                for (const QJsonValue &value : resultArray)
+                if (!code.isEmpty() && !name.isEmpty())
                 {
-                    QJsonObject stockObj = value.toObject();
-                    QString code = stockObj["code"].toString();
-                    QString name = stockObj["name"].toString();
-                    QString market = stockObj["type"].toString();
-
-                    if (!code.isEmpty() && !name.isEmpty())
-                    {
-                        StockInfo result(code, name);
-                        results.append(result);
-                    }
+                    StockInfo result(standardCode, name);
+                    results.append(result);
                 }
             }
         }
@@ -201,6 +211,7 @@ private:
 
         if (error.error != QJsonParseError::NoError)
         {
+            emit errorOccurred(QString("Netease data parse error: %1").arg(error.errorString()));
             return stockInfos;
         }
 
@@ -236,27 +247,47 @@ private:
         stockInfo.setName(stockObj["name"].toString());
         stockInfo.setCurrentPrice(stockObj["price"].toDouble());
         stockInfo.setChange(stockObj["updown"].toDouble());
-        stockInfo.setChangePercent(stockObj["percent"].toDouble());
+        stockInfo.setChangePercent(stockObj["percent"].toDouble() * 100); // 网易返回的是小数，需要转换为百分比
         stockInfo.setHigh(stockObj["high"].toDouble());
         stockInfo.setLow(stockObj["low"].toDouble());
         stockInfo.setOpenPrice(stockObj["open"].toDouble());
         stockInfo.setYesterday(stockObj["yestclose"].toDouble());
         stockInfo.setVolume(stockObj["volume"].toVariant().toLongLong());
         stockInfo.setTurnover(stockObj["turnover"].toDouble());
-        stockInfo.setBid1(stockObj["bid1"].toDouble());
-        stockInfo.setAsk1(stockObj["ask1"].toDouble());
-        stockInfo.setBid1Volume(stockObj["bidvol1"].toVariant().toLongLong() * 100);
-        stockInfo.setAsk1Volume(stockObj["askvol1"].toVariant().toLongLong() * 100);
-        stockInfo.setTradeDate(stockObj["time"].toString().split(" ")[0]);
-        stockInfo.setTradeTime(stockObj["time"].toString().split(" ")[1]);
+        
+        // 买卖盘数据
+        if (stockObj.contains("bid1")) {
+            stockInfo.setBid1(stockObj["bid1"].toDouble());
+            stockInfo.setAsk1(stockObj["ask1"].toDouble());
+            stockInfo.setBid1Volume(stockObj["bidvol1"].toVariant().toLongLong() * 100);
+            stockInfo.setAsk1Volume(stockObj["askvol1"].toVariant().toLongLong() * 100);
+        } else {
+            stockInfo.setBid1(0.0);
+            stockInfo.setAsk1(0.0);
+            stockInfo.setBid1Volume(0);
+            stockInfo.setAsk1Volume(0);
+        }
+        
+        // 日期和时间
+        if (stockObj.contains("time")) {
+            QString timeStr = stockObj["time"].toString();
+            QStringList timeParts = timeStr.split(" ");
+            if (timeParts.size() >= 2) {
+                stockInfo.setTradeDate(timeParts[0]);
+                stockInfo.setTradeTime(timeParts[1]);
+            } else {
+                QDateTime now = QDateTime::currentDateTime();
+                stockInfo.setTradeDate(now.toString("yyyy-MM-dd"));
+                stockInfo.setTradeTime(now.toString("HH:mm:ss"));
+            }
+        } else {
+            QDateTime now = QDateTime::currentDateTime();
+            stockInfo.setTradeDate(now.toString("yyyy-MM-dd"));
+            stockInfo.setTradeTime(now.toString("HH:mm:ss"));
+        }
+        
         stockInfo.setLastUpdate(QDateTime::currentDateTime());
 
         return stockInfo;
     }
-
-    QNetworkAccessManager *netmgr_;
-    QList<QNetworkReply *> m_pendingReplies;
-    QStringList m_pendingCodes;
-    QList<StockInfo> m_pendingStockInfos;
-    int m_expectedReplies;
 };

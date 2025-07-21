@@ -1,16 +1,12 @@
 #pragma once
 
-#include <QDateTime>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QNetworkRequest>
-#include <QRegularExpression>
-#include <QUrl>
-
+#include "../StockInfo.hpp"
 #include "IStockApiProvider.hpp"
+#include <QDateTime>
+#include <QDebug>
+#include <QRegularExpression>
+#include <QTextCodec>
+#include <QUrl>
 
 class TencentStockApiProvider : public IStockApiProvider
 {
@@ -19,8 +15,6 @@ class TencentStockApiProvider : public IStockApiProvider
 public:
     explicit TencentStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , netmgr_(new QNetworkAccessManager(this))
-        , m_expectedReplies(0)
     {
     }
 
@@ -32,24 +26,15 @@ public:
     void searchStocksAsync(const QString &keyword) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
-        QString url = QString("http://smartbox.gtimg.cn/s3/?q=%1&t=gp").arg(encodedKeyword);
-
-        QNetworkRequest request;
-        request.setUrl(QUrl(url));
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        request.setRawHeader("Referer", "https://gu.qq.com");
-
-        QNetworkReply *reply = netmgr_->get(request);
-        connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onSearchFinished);
+        QUrl url(QString("https://smartbox.gtimg.cn/s3/?v=2&t=all&c=1&q=%1").arg(encodedKeyword));
+        QNetworkRequest req(url);
+        auto reply = netmgr_->get(req);
+        connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onSearchRequestSucceeded);
+        connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
     }
 
     void getStockInfosAsync(const QStringList &codes) override
     {
-        m_pendingCodes = codes;
-        m_pendingStockInfos.clear();
-        m_pendingReplies.clear();
-        m_expectedReplies = codes.size();
-
         QStringList formattedCodes;
         for (const QString &code : codes)
         {
@@ -57,68 +42,123 @@ public:
             formattedCodes.append(formattedCode);
         }
 
-        QString url = QString("http://qt.gtimg.cn/q=%1").arg(formattedCodes.join(","));
-
-        QNetworkRequest request;
-        request.setUrl(QUrl(url));
-        request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-        request.setRawHeader("Referer", "https://gu.qq.com");
-
-        QNetworkReply *reply = netmgr_->get(request);
-        reply->setProperty("stockCodes", codes);
-        reply->setProperty("formattedCodes", formattedCodes);
-        m_pendingReplies.append(reply);
-        connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onStockInfosFinished);
+        QUrl url(QString("https://qt.gtimg.cn/q=%1").arg(formattedCodes.join(",")));
+        QNetworkRequest req(url);
+        auto reply = netmgr_->get(req);
+        connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onStockInfoRequestSucceeded);
+        connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
     }
 
 private slots:
-    void onSearchFinished()
+    void onSearchRequestSucceeded()
     {
         QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-        if (!reply)
+        const QByteArray &responseData = reply->readAll();
+        // 使用GBK编码解析响应数据
+        QTextCodec *codec = QTextCodec::codecForName("GBK");
+        QString response = codec ? codec->toUnicode(responseData) : QString::fromUtf8(responseData);
+
+        // 解析新接口返回的数据格式
+        QList<StockInfo> results;
+
+        // 解析 v_hint="sz~002609~捷顺科技~jskj~GP-A^sz~300193~佳士科技~jskj~GP-A^..." 格式
+        QRegularExpression pattern("v_hint=\"([^\"]+)\"");
+        QRegularExpressionMatch match = pattern.match(response);
+
+        if (match.hasMatch())
         {
-            return;
+            QString data = match.captured(1);
+            QStringList stockEntries = data.split('^', Qt::SkipEmptyParts);
+
+            for (const QString &entry : stockEntries)
+            {
+                QStringList fields = entry.split('~');
+
+                if (fields.size() >= 3)
+                {
+                    QString market = fields[0];  // sz, sh 等
+                    QString code = fields[1];    // 股票代码
+                    QString name = fields[2];    // 股票名称
+
+                    if (!code.isEmpty() && !name.isEmpty())
+                    {
+                        // 解码Unicode转义序列
+                        name = decodeUnicodeEscapes(name);
+                        
+                        // 标准化市场代码
+                        QString marketPrefix;
+                        if (market.toLower() == "sh")
+                        {
+                            marketPrefix = "SH";
+                        }
+                        else if (market.toLower() == "sz")
+                        {
+                            marketPrefix = "SZ";
+                        }
+                        else if (market.toLower() == "hk")
+                        {
+                            marketPrefix = "HK";
+                        }
+                        else
+                        {
+                            marketPrefix = market.toUpper();
+                        }
+
+                        // 构建标准化的股票代码
+                        QString standardCode = marketPrefix + code;
+                        StockInfo result(standardCode, name);
+                        results.append(result);
+                    }
+                }
+            }
         }
 
-        reply->deleteLater();
-
-        if (reply->error() != QNetworkReply::NoError)
-        {
-            emit errorOccurred(QString("Search failed: %1").arg(reply->errorString()));
-            return;
-        }
-
-        QString response = QString::fromUtf8(reply->readAll());
-        QList<StockInfo> results = parseTencentSearchData(response);
         emit searchCompleted(results);
     }
 
-    void onStockInfosFinished()
+    void onStockInfoRequestSucceeded()
     {
         QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-        if (!reply) return;
+        const QByteArray &responseData = reply->readAll();
+        // 使用GBK编码解析响应数据
+        QTextCodec *codec = QTextCodec::codecForName("GBK");
+        QString response = codec ? codec->toUnicode(responseData) : QString::fromUtf8(responseData);
 
-        QStringList stockCodes = reply->property("stockCodes").toStringList();
-        QStringList formattedCodes = reply->property("formattedCodes").toStringList();
-        m_pendingReplies.removeOne(reply);
+        // 由于我们无法从worker获取属性，我们需要重新解析所有可能的股票代码
+        // 这里简化处理，直接解析响应中的所有股票数据
+        QList<StockInfo> stockInfos = parseAllStockDataFromResponse(response);
+        emit stockInfosReceived(stockInfos);
+    }
 
-        if (reply->error() == QNetworkReply::NoError)
-        {
-            QString response = QString::fromUtf8(reply->readAll());
-            QList<StockInfo> stockInfos = parseTencentBatchStockData(stockCodes, formattedCodes, response);
-            m_pendingStockInfos.append(stockInfos);
-        }
-
-        reply->deleteLater();
-
-        if (m_pendingReplies.isEmpty())
-        {
-            emit stockInfosReceived(m_pendingStockInfos);
-            m_pendingStockInfos.clear();
-        }
+    void onRequestFailed(const QString &errorMessage, int statusCode)
+    {
+        Q_UNUSED(statusCode)
+        emit errorOccurred(errorMessage);
     }
 
 private:
+    QString decodeUnicodeEscapes(const QString &input)
+    {
+        QString result = input;
+        QRegularExpression unicodePattern("\\\\u([0-9a-fA-F]{4})");
+        QRegularExpressionMatchIterator iterator = unicodePattern.globalMatch(input);
+        
+        while (iterator.hasNext())
+        {
+            QRegularExpressionMatch match = iterator.next();
+            QString unicodeStr = match.captured(1);
+            bool ok;
+            ushort unicodeValue = unicodeStr.toUShort(&ok, 16);
+            if (ok)
+            {
+                QChar unicodeChar(unicodeValue);
+                result.replace(match.captured(0), unicodeChar);
+            }
+        }
+        
+        return result;
+    }
+
     QString formatStockCode(const QString &code)
     {
         QString upperCode = code.toUpper();
@@ -142,42 +182,56 @@ private:
         return upperCode.toLower();
     }
 
-    QList<StockInfo> parseTencentSearchData(const QString &response)
+    QList<StockInfo> parseAllStockDataFromResponse(const QString &response)
     {
-        QList<StockInfo> results;
+        QList<StockInfo> stockInfos;
+        QStringList lines = response.split("\n", Qt::SkipEmptyParts);
 
-        // 腾讯搜索返回格式: v_hint="sh000001~上证指数~000001~1~SZZS";
-        QRegularExpression pattern("\"([^\"]+)\"");
-        QRegularExpressionMatch match = pattern.match(response);
-
-        if (match.hasMatch())
+        for (const QString &line : lines)
         {
-            QString data = match.captured(1);
-            QStringList stockEntries = data.split(';', Qt::SkipEmptyParts);
-
-            for (const QString &entry : stockEntries)
+            if (line.startsWith("v_") && line.contains("="))
             {
-                QStringList fields = entry.split('~');
-                if (fields.size() >= 4)
+                // 从行中提取股票代码
+                QString stockCode = extractStockCodeFromLine(line);
+                if (!stockCode.isEmpty())
                 {
-                    QString fullCode = fields[0];
-                    QString name = fields[1];
-                    QString code = fields[2];
-                    QString type = fields[3];
-
-                    if (!code.isEmpty() && !name.isEmpty())
+                    StockInfo stockInfo = parseTencentStockData(stockCode, line);
+                    if (!stockInfo.code().isEmpty())
                     {
-                        QString market = fullCode.startsWith("sh") ? "SH" : "SZ";
-                        StockInfo result(code, name);
-                        results.append(result);
+                        stockInfos.append(stockInfo);
                     }
                 }
             }
         }
 
-        return results;
+        return stockInfos;
     }
 
+    QString extractStockCodeFromLine(const QString &line)
+    {
+        // 从 "v_sh000001=" 这样的格式中提取股票代码
+        QRegularExpression pattern("v_([a-z]{2}\\d{6})=");
+        QRegularExpressionMatch match = pattern.match(line);
+
+        if (match.hasMatch())
+        {
+            QString formattedCode = match.captured(1);
+            // 转换为标准格式
+            if (formattedCode.startsWith("sh"))
+            {
+                return "SH" + formattedCode.mid(2);
+            }
+            else if (formattedCode.startsWith("sz"))
+            {
+                return "SZ" + formattedCode.mid(2);
+            }
+        }
+
+        return QString();
+    }
+
+    // 这个方法在当前实现中未使用，移除以避免编译错误
+    /*
     QList<StockInfo> parseTencentBatchStockData(const QStringList &originalCodes, const QStringList &formattedCodes, const QString &response)
     {
         QList<StockInfo> stockInfos;
@@ -191,7 +245,8 @@ private:
             QString stockLine;
             for (const QString &line : lines)
             {
-                if (line.contains(QString("v_%1=").arg(formattedCode)))
+                // 使用更精确的匹配模式，确保找到正确的股票数据行
+                if (line.startsWith(QString("v_%1=").arg(formattedCode)) || line.contains(QString("=\"%1~").arg(formattedCode)))
                 {
                     stockLine = line;
                     break;
@@ -206,10 +261,45 @@ private:
                     stockInfos.append(stockInfo);
                 }
             }
+            else
+            {
+                // 尝试使用不同的格式化方式再次查找
+                QString altFormattedCode;
+                if (originalCode.startsWith("SH"))
+                {
+                    altFormattedCode = "sh" + originalCode.mid(2);
+                }
+                else if (originalCode.startsWith("SZ"))
+                {
+                    altFormattedCode = "sz" + originalCode.mid(2);
+                }
+
+                if (!altFormattedCode.isEmpty())
+                {
+                    for (const QString &line : lines)
+                    {
+                        if (line.startsWith(QString("v_%1=").arg(altFormattedCode)) || line.contains(QString("=\"%1~").arg(altFormattedCode)))
+                        {
+                            stockLine = line;
+                            break;
+                        }
+                    }
+
+                    if (!stockLine.isEmpty())
+                    {
+                        StockInfo stockInfo = parseTencentStockData(originalCode, stockLine);
+                        if (!stockInfo.code().isEmpty())
+                        {
+                            stockInfos.append(stockInfo);
+                        }
+                    }
+                }
+            }
         }
 
         return stockInfos;
     }
+    */
 
     StockInfo parseTencentStockData(const QString &code, const QString &response)
     {
@@ -224,36 +314,27 @@ private:
             QString data = match.captured(1);
             QStringList fields = data.split('~');
 
-            if (fields.size() >= 50)
+            if (fields.size() >= 35)  // 确保有足够的字段
             {
                 stockInfo.setCode(code);
                 stockInfo.setName(fields[1]);
+
+                // 设置基本价格信息
                 stockInfo.setCurrentPrice(fields[3].toDouble());
-                stockInfo.setChange(fields[4].toDouble());
-                stockInfo.setChangePercent(fields[5].toDouble());
-                stockInfo.setVolume(fields[6].toLongLong());
-                stockInfo.setTurnover(fields[7].toDouble());
-                stockInfo.setOpenPrice(fields[5].toDouble());
-                stockInfo.setYesterday(
-                    fields[4].toDouble() > 0 ? fields[3].toDouble() - fields[4].toDouble() : fields[3].toDouble() + qAbs(fields[4].toDouble()));
-                stockInfo.setHigh(fields[33].toDouble());
-                stockInfo.setLow(fields[34].toDouble());
-                stockInfo.setBid1(fields[9].toDouble());
-                stockInfo.setAsk1(fields[19].toDouble());
-                stockInfo.setBid1Volume(fields[10].toLongLong() * 100);
-                stockInfo.setAsk1Volume(fields[20].toLongLong() * 100);
-                stockInfo.setTradeDate(fields[30]);
-                stockInfo.setTradeTime(fields[31]);
+                stockInfo.setYesterday(fields[4].toDouble());
+                stockInfo.setVolume(fields[36].toLongLong() * 100);      // 转换为股数
+                stockInfo.setTurnover(fields[37].toDouble() * 10000);    // 转换为元
+                stockInfo.setBid1(fields[9].toDouble());                 // 买一价
+                stockInfo.setAsk1(fields[19].toDouble());                // 卖一价
+                stockInfo.setBid1Volume(fields[10].toLongLong() * 100);  // 买一量
+                stockInfo.setAsk1Volume(fields[20].toLongLong() * 100);  // 卖一量
+                stockInfo.setChange(fields[31].toDouble());
+                stockInfo.setChangePercent(fields[32].toDouble());
+
                 stockInfo.setLastUpdate(QDateTime::currentDateTime());
             }
         }
 
         return stockInfo;
     }
-
-    QNetworkAccessManager *netmgr_;
-    QList<QNetworkReply *> m_pendingReplies;
-    QStringList m_pendingCodes;
-    QList<StockInfo> m_pendingStockInfos;
-    int m_expectedReplies;
 };

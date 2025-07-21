@@ -12,21 +12,19 @@
 
 #include "IStockApiProvider.hpp"
 
-class EastMoneyStockApiProvider : public IStockApiProvider
+class EasyMoneyStockApiProvider : public IStockApiProvider
 {
     Q_OBJECT
 
 public:
-    explicit EastMoneyStockApiProvider(QObject *parent = nullptr)
+    explicit EasyMoneyStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
-        , netmgr_(new QNetworkAccessManager(this))
-        , m_expectedReplies(0)
     {
     }
 
     QString name() const override
     {
-        return "eastmoney";
+        return "easymoney";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -41,15 +39,11 @@ public:
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
         QNetworkReply *reply = netmgr_->get(request);
-        connect(reply, &QNetworkReply::finished, this, &EastMoneyStockApiProvider::onSearchFinished);
+        connect(reply, &QNetworkReply::finished, this, &EasyMoneyStockApiProvider::onSearchFinished);
     }
 
     void getStockInfosAsync(const QStringList &codes) override
     {
-        m_pendingCodes = codes;
-        m_pendingStockInfos.clear();
-        m_expectedReplies = codes.size();
-
         QStringList formattedCodes;
         for (const QString &code : codes)
         {
@@ -70,7 +64,7 @@ public:
         QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
-        connect(reply, &QNetworkReply::finished, this, &EastMoneyStockApiProvider::onStockInfosFinished);
+        connect(reply, &QNetworkReply::finished, this, &EasyMoneyStockApiProvider::onStockInfosFinished);
     }
 
 private slots:
@@ -102,21 +96,40 @@ private slots:
 
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
-
+        
+        QList<StockInfo> stockInfos;
+        
         if (reply->error() == QNetworkReply::NoError)
         {
             QString response = QString::fromUtf8(reply->readAll());
-            QList<StockInfo> stockInfos = parseEasyMoneyBatchStockData(stockCodes, formattedCodes, response);
-            m_pendingStockInfos.append(stockInfos);
+            stockInfos = parseEasyMoneyBatchStockData(stockCodes, formattedCodes, response);
         }
-
+        else
+        {
+            emit errorOccurred(QString("EasyMoney API Error: %1").arg(reply->errorString()));
+        }
+        
         reply->deleteLater();
+        emit stockInfosReceived(stockInfos);
     }
 
 private:
     QString formatStockCode(const QString &code)
     {
         QString upperCode = code.toUpper();
+
+        if (upperCode.startsWith("SZ") || upperCode.startsWith("SH"))
+        {
+            // 已经是带市场前缀的代码，转换为东方财富格式
+            if (upperCode.startsWith("SZ"))
+            {
+                return QString("0.%1").arg(upperCode.mid(2));
+            }
+            else if (upperCode.startsWith("SH"))
+            {
+                return QString("1.%1").arg(upperCode.mid(2));
+            }
+        }
 
         if (upperCode.length() == 6)
         {
@@ -148,6 +161,7 @@ private:
 
         if (error.error != QJsonParseError::NoError)
         {
+            emit errorOccurred(QString("EasyMoney search parse error: %1").arg(error.errorString()));
             return results;
         }
 
@@ -167,10 +181,13 @@ private:
                         QString code = stockObj["Code"].toString();
                         QString name = stockObj["Name"].toString();
                         QString market = stockObj["MktNum"].toString() == "1" ? "SH" : "SZ";
+                        
+                        // 构建标准格式的代码
+                        QString standardCode = market + code;
 
                         if (!code.isEmpty() && !name.isEmpty())
                         {
-                            StockInfo result(code, name);
+                            StockInfo result(standardCode, name);
                             results.append(result);
                         }
                     }
@@ -190,6 +207,7 @@ private:
 
         if (error.error != QJsonParseError::NoError)
         {
+            emit errorOccurred(QString("EasyMoney data parse error: %1").arg(error.errorString()));
             return stockInfos;
         }
 
@@ -199,27 +217,38 @@ private:
             if (rootObj.contains("data") && rootObj["data"].isObject())
             {
                 QJsonObject dataObj = rootObj["data"].toObject();
-                if (dataObj.contains("diff"))
+                if (dataObj.contains("diff") && dataObj["diff"].isObject())
                 {
-                    QJsonArray diffArray = dataObj["diff"].toArray();
-
-                    for (int i = 0; i < originalCodes.size(); ++i)
+                    QJsonObject diffObj = dataObj["diff"].toObject();
+                    
+                    for (int i = 0; i < originalCodes.size() && i < formattedCodes.size(); ++i)
                     {
                         const QString &originalCode = originalCodes[i];
-
-                        for (const QJsonValue &value : diffArray)
+                        const QString &formattedCode = formattedCodes[i];
+                        
+                        // 在diff对象中查找对应的股票数据
+                        for (const QString &key : diffObj.keys())
                         {
-                            QJsonObject stockObj = value.toObject();
-                            QString stockCode = stockObj["f12"].toString();
-
-                            if (stockCode == originalCode)
+                            QJsonObject stockObj = diffObj[key].toObject();
+                            
+                            // 检查是否匹配当前股票代码
+                            QString secid = stockObj["f12"].toString();
+                            if (!secid.isEmpty())
                             {
-                                StockInfo stockInfo = parseEasyMoneyStockData(originalCode, stockObj);
-                                if (!stockInfo.code().isEmpty())
+                                // 提取股票代码并构建标准格式
+                                QString market = formattedCode.startsWith("0.") ? "SZ" : "SH";
+                                QString code = secid;
+                                QString standardCode = market + code;
+                                
+                                if (standardCode == originalCode || code == originalCode.mid(2))
                                 {
-                                    stockInfos.append(stockInfo);
+                                    StockInfo stockInfo = parseEasyMoneyStockData(originalCode, stockObj);
+                                    if (!stockInfo.code().isEmpty())
+                                    {
+                                        stockInfos.append(stockInfo);
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                     }
@@ -236,22 +265,24 @@ private:
 
         stockInfo.setCode(code);
         stockInfo.setName(stockObj["f14"].toString());
-        stockInfo.setCurrentPrice(stockObj["f2"].toDouble());
-        stockInfo.setChange(stockObj["f4"].toDouble());
-        stockInfo.setChangePercent(stockObj["f3"].toDouble());
-        stockInfo.setHigh(stockObj["f15"].toDouble());
-        stockInfo.setLow(stockObj["f16"].toDouble());
-        stockInfo.setOpenPrice(stockObj["f17"].toDouble());
-        stockInfo.setYesterday(stockObj["f18"].toDouble());
+        stockInfo.setCurrentPrice(stockObj["f2"].toDouble() / 100.0);  // 价格可能需要除以100
+        stockInfo.setChange(stockObj["f4"].toDouble() / 100.0);        // 涨跌额可能需要除以100
+        stockInfo.setChangePercent(stockObj["f3"].toDouble() / 100.0); // 涨跌幅可能需要除以100
+        stockInfo.setHigh(stockObj["f15"].toDouble() / 100.0);
+        stockInfo.setLow(stockObj["f16"].toDouble() / 100.0);
+        stockInfo.setOpenPrice(stockObj["f17"].toDouble() / 100.0);
+        stockInfo.setYesterday(stockObj["f18"].toDouble() / 100.0);
         stockInfo.setVolume(stockObj["f5"].toVariant().toLongLong());
         stockInfo.setTurnover(stockObj["f6"].toDouble());
-        stockInfo.setBid1(stockObj["f19"].toDouble());
-        stockInfo.setAsk1(stockObj["f20"].toDouble());
-        stockInfo.setBid1Volume(stockObj["f21"].toVariant().toLongLong() * 100);
-        stockInfo.setAsk1Volume(stockObj["f22"].toVariant().toLongLong() * 100);
+        
+        // 买卖盘数据可能不存在，设置默认值
+        stockInfo.setBid1(stockObj.contains("f19") ? stockObj["f19"].toDouble() / 100.0 : 0.0);
+        stockInfo.setAsk1(stockObj.contains("f20") ? stockObj["f20"].toDouble() / 100.0 : 0.0);
+        stockInfo.setBid1Volume(stockObj.contains("f21") ? stockObj["f21"].toVariant().toLongLong() * 100 : 0);
+        stockInfo.setAsk1Volume(stockObj.contains("f22") ? stockObj["f22"].toVariant().toLongLong() * 100 : 0);
 
         // 东方财富时间格式处理
-        QString timeStr = stockObj["f86"].toString();
+        QString timeStr = stockObj.contains("f86") ? stockObj["f86"].toString() : "";
         if (!timeStr.isEmpty())
         {
             QDateTime dateTime = QDateTime::fromString(timeStr, "yyyyMMddHHmmss");
@@ -261,14 +292,16 @@ private:
                 stockInfo.setTradeTime(dateTime.toString("HH:mm:ss"));
             }
         }
+        else
+        {
+            // 如果没有时间字段，使用当前时间
+            QDateTime now = QDateTime::currentDateTime();
+            stockInfo.setTradeDate(now.toString("yyyy-MM-dd"));
+            stockInfo.setTradeTime(now.toString("HH:mm:ss"));
+        }
 
         stockInfo.setLastUpdate(QDateTime::currentDateTime());
 
         return stockInfo;
     }
-
-    QNetworkAccessManager *netmgr_;
-    QStringList m_pendingCodes;
-    QList<StockInfo> m_pendingStockInfos;
-    int m_expectedReplies;
 };

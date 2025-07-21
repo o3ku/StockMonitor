@@ -25,10 +25,6 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
-#ifdef Q_OS_WIN
-    #include <windows.h>
-#endif
-
 #include "Logger.hpp"
 #include "StockApiService.hpp"
 #include "StockConfig.hpp"
@@ -41,9 +37,9 @@ class MainWindow : public QFrame
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr)
+    explicit MainWindow(const std::shared_ptr<StockConfig> &config, QWidget *parent = nullptr)
         : QFrame(parent)
-        , config_(std::make_shared<StockConfig>())
+        , config_(config)
         , api_(StockApiService::instance().get(config_->apiSource))
         , titleBar_(new QWidget(this))
         , input_(new QLineEdit(this))
@@ -58,11 +54,11 @@ public:
     {
         Logger::info(QString("Use %1 API").arg(api_->name()));
         setupUi();
-        setupGlobalShortcut();
         setupSystemTray();
         applyTheme();
         startRefresh();
 
+        setAttribute(Qt::WA_DeleteOnClose, false);
         refreshTimer_->setSingleShot(true);
         searchDelayTimer_->setSingleShot(true);
 
@@ -71,7 +67,12 @@ public:
         });
         connect(api_, &IStockApiProvider::stockInfosReceived, table_, &StockTableView::updateStocksDetail);
 
-        connect(input_, &QLineEdit::textChanged, this, [this] {
+        connect(input_, &QLineEdit::textChanged, this, [this](auto &&text) {
+            if (text.isEmpty())
+            {
+                searchResultWidget_->hide();
+                return;
+            }
             searchDelayTimer_->start(500);
         });
         connect(searchDelayTimer_, &QTimer::timeout, this, [this] {
@@ -79,7 +80,11 @@ public:
             // result_->hide();
             input_->setFocus();
             auto text = input_->text().trimmed();
-            if (text.isEmpty()) return;
+            if (text.isEmpty())
+            {
+                searchResultWidget_->hide();
+                return;
+            }
             qDebug() << "search stock" << api_->name() << text;
             api_->searchStocksAsync(text);
         });
@@ -100,9 +105,6 @@ public:
 
     ~MainWindow()
     {
-#ifdef Q_OS_WIN
-        UnregisterHotKey((HWND)winId(), 1);
-#endif
     }
 
 protected:
@@ -147,7 +149,7 @@ protected:
         else if (watched == this && etype == QEvent::Wheel && ((QWheelEvent *)event)->modifiers() & Qt::AltModifier)
         {
             auto changeOpacity = [this, currentOpacity = windowOpacity()](int angle) {
-                qreal newOpacity = qBound(0.2, currentOpacity + (angle > 0 ? -0.05 : 0.05), 1.0);
+                qreal newOpacity = qBound(0.2, currentOpacity + (angle > 0 ? +0.05 : -0.05), 1.0);
                 if (qAbs(newOpacity - currentOpacity) > 0.001)
                 {
                     setWindowOpacity(newOpacity);
@@ -168,6 +170,11 @@ protected:
         {
             searchResultWidget_->setGeometry(table_->geometry());
         }
+        else if (watched == this && (etype == QEvent::Close))
+        {
+            hide();
+            return true;
+        }
         else if (watched == titleBar_)
         {
             auto me = dynamic_cast<QMouseEvent *>(event);
@@ -187,25 +194,6 @@ protected:
         }
         return QWidget::eventFilter(watched, event);
     }
-
-#ifdef Q_OS_WIN
-    bool nativeEvent(const QByteArray &eventType, void *message, long *result) override
-    {
-        if (eventType == "windows_generic_MSG")
-        {
-            MSG *msg = static_cast<MSG *>(message);
-            if (msg->message == WM_HOTKEY)
-            {
-                if (msg->wParam == 1)  // Our hotkey ID
-                {
-                    toggleWindowVisibility();
-                    return true;
-                }
-            }
-        }
-        return QWidget::nativeEvent(eventType, message, result);
-    }
-#endif
 
 private:
     void startRefresh()
@@ -279,7 +267,7 @@ private:
         setWindowFlag(Qt::WindowSystemMenuHint, false);
         setWindowTitle("Stock Monitor");
         setWindowIcon(QIcon(":/app-icon.svg"));
-        setMinimumSize(260, 360);
+        setMinimumSize(250, 200);
 
         input_->setObjectName("searchInput");
         titleBar_->setFixedHeight(40);
@@ -292,8 +280,6 @@ private:
         titleLayout->addWidget(btns_[0]);
         titleLayout->addWidget(btns_[1]);
 
-        // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::saveStockList);
-        // connect(table_, &StockTableView::stockListChanged, this, &MainWindow::updateSearchWidgetExistingStocks);
         auto wrap = new QVBoxLayout;
         wrap->setContentsMargins(5, 5, 5, 5);
         wrap->addWidget(table_, 1);
@@ -312,60 +298,8 @@ private:
         setWindowOpacity(config_->windowOpacity);
     }
 
-    void setupGlobalShortcut()
-    {
-#ifdef Q_OS_WIN
-
-        auto upperKey = config_->hotkeyKey.toUpper();
-        QString keyChar = upperKey.split('+', Qt::SkipEmptyParts).last().trimmed();
-
-        UINT modifiers = 0;
-        if (upperKey.contains("CTRL")) modifiers |= MOD_CONTROL;
-        if (upperKey.contains("ALT")) modifiers |= MOD_ALT;
-        if (upperKey.contains("SHIFT")) modifiers |= MOD_SHIFT;
-
-        UINT vkCode = 0;
-        if (keyChar.length() == 1)
-        {
-            vkCode = keyChar.at(0).toUpper().toLatin1();
-        }
-        else
-        {
-            static QMap<QString, UINT> key2code{
-                { "F1", VK_F1 },
-                { "F2", VK_F2 },
-                { "F3", VK_F3 },
-                { "F4", VK_F4 },
-                { "F5", VK_F5 },
-                { "F6", VK_F6 },
-                { "F7", VK_F7 },
-                { "F8", VK_F8 },
-                { "F9", VK_F9 },
-                { "F10", VK_F10 },
-                { "F11", VK_F11 },
-                { "F12", VK_F12 },
-                { "SPACE", VK_SPACE },
-                { "ENTER", VK_RETURN },
-                { "ESCAPE", VK_ESCAPE },
-            };
-            vkCode = key2code.value(keyChar, 'S');
-        }
-
-        if (!RegisterHotKey((HWND)winId(), 1, modifiers, vkCode))
-        {
-            DWORD error = GetLastError();
-            Logger::error(QString("Failed to register global hotkey %1 (Error: %2)").arg(config_->hotkeyKey).arg(error));
-        }
-        else
-        {
-            Logger::info(QString("Successfully registered global hotkey: %1").arg(config_->hotkeyKey));
-        }
-#endif
-    }
-
     void setupSystemTray()
     {
-        // Check if system tray is available
         if (!QSystemTrayIcon::isSystemTrayAvailable())
         {
             Logger::error("System tray is not available on this system");
@@ -384,56 +318,6 @@ private:
         tray->show();
 
         connect(tray, &QSystemTrayIcon::activated, this, &MainWindow::onTrayIconActivated);
-    }
-
-    void toggleWindowVisibility()
-    {
-        if (!isActiveWindow())
-        {
-            show();
-            activateWindow();
-        }
-        else
-        {
-            hide();
-        }
-    }
-
-    void saveStockList()
-    {
-        // QStringList stockCodes;
-        // QList<StockInfo> stockData = table_->stockData();
-        // for (const StockInfo &stock : stockData)
-        // {
-        //     stockCodes.append(stock.code());
-        // }
-
-        // // 使用 ConfigManager 保存股票列表
-        // ConfigManager::instance().setStockCodes(stockCodes);
-    }
-
-    void loadStockList()
-    {
-        // // 使用 ConfigManager 加载股票列表
-        // QStringList stockCodes = ConfigManager::instance().getConfig().stockCodes;
-
-        // if (stockCodes.isEmpty())
-        // {
-        //     requestStockPrices();
-        //     return;
-        // }
-
-        // for (const QString &code : stockCodes)
-        // {
-        //     QString trimmedCode = code.trimmed();
-        //     if (trimmedCode.isEmpty()) continue;
-
-        //     StockInfo stockInfo = createEmptyStockInfo(trimmedCode);
-        //     table_->addStock(stockInfo);
-        // }
-
-        // updateSearchWidgetExistingStocks();
-        // requestStockPrices();
     }
 
     void toggleTheme()
@@ -485,7 +369,6 @@ private:
     QList<QPushButton *> btns_;
     StockTableView *table_;
 
-    // Window dragging
     QPoint mousePressedPosition_;
 
     QTimer *refreshTimer_;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "StockInfo.hpp"
+#include "../StockInfo.hpp"
 #include <QList>
 #include <QNetworkAccessManager>
 #include <QObject>

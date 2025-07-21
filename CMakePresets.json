@@ -1,0 +1,34 @@
+﻿{
+    "version": 8,
+    "configurePresets": [
+        {
+            "name": "msvc-debug",
+            "generator": "Ninja",
+            "binaryDir": "Build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl",
+                "CMAKE_TOOLCHAIN_FILE": "D:/Code/vcpkg.2024.09.30/scripts/buildsystems/vcpkg.cmake"
+            }
+        },
+        {
+            "name": "msvc-release",
+            "inherits": "msvc-debug",
+            "binaryDir": "Build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "msvc-debug",
+            "configurePreset": "msvc-debug"
+        },
+        {
+            "name": "msvc-release",
+            "configurePreset": "msvc-release"
+        }
+    ]
+}
