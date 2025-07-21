@@ -221,10 +221,13 @@ private:
                 stockInfo.setTradeDate(fields[30]);
                 stockInfo.setTradeTime(fields[31]);
 
-                double change = stockInfo.currentPrice() - stockInfo.yesterday();
-                double changePercent = stockInfo.yesterday() > 0 ? (change / stockInfo.yesterday()) * 100 : 0;
-                stockInfo.setChange(change);
-                stockInfo.setChangePercent(changePercent);
+                if (stockInfo.yesterday() > 0 && stockInfo.currentPrice())
+                {
+                    double change = stockInfo.currentPrice() - stockInfo.yesterday();
+                    double changePercent = stockInfo.yesterday() > 0 ? (change / stockInfo.yesterday()) * 100 : 0;
+                    stockInfo.setChange(change);
+                    stockInfo.setChangePercent(changePercent);
+                }
                 stockInfo.setLastUpdate(QDateTime::currentDateTime());
             }
         }

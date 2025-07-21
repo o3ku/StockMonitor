@@ -45,9 +45,9 @@ private:
             []() {
                 return new NeteaseStockApiProvider();
             } },
-        { "easemoney",
+        { "eastmoney",
             []() {
-                return new EasyMoneyStockApiProvider();
+                return new EastMoneyStockApiProvider();
             } },
         { "xueqiu",
             []() {

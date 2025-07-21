@@ -40,6 +40,11 @@ struct StockConfig
 
     ~StockConfig()
     {
+        save();
+    }
+
+    void save()
+    {
         QSettings settings(filepath_, QSettings::IniFormat);
         settings.setValue("api/source", apiSource);
         settings.setValue("Stock/Codes", stockCodes.join(","));

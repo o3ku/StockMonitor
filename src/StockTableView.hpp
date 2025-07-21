@@ -107,8 +107,6 @@ public:
         // Implementation if needed
     }
 
-signals:
-    void stockListChanged();
 
 protected:
     void paintEvent(QPaintEvent *event) override
@@ -300,6 +298,8 @@ private:
         horizontalHeader()->setDefaultAlignment(Qt::AlignLeft);
 
         verticalHeader()->setVisible(false);
+
+        setItemDelegate(new ColorPreservingDelegate(this));
     }
 
     void setupContextMenu()

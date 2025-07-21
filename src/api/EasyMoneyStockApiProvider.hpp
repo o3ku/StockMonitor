@@ -12,12 +12,12 @@
 
 #include "IStockApiProvider.hpp"
 
-class EasyMoneyStockApiProvider : public IStockApiProvider
+class EastMoneyStockApiProvider : public IStockApiProvider
 {
     Q_OBJECT
 
 public:
-    explicit EasyMoneyStockApiProvider(QObject *parent = nullptr)
+    explicit EastMoneyStockApiProvider(QObject *parent = nullptr)
         : IStockApiProvider(parent)
         , netmgr_(new QNetworkAccessManager(this))
         , m_expectedReplies(0)
@@ -26,7 +26,7 @@ public:
 
     QString name() const override
     {
-        return "easymoney";
+        return "eastmoney";
     }
 
     void searchStocksAsync(const QString &keyword) override
@@ -41,7 +41,7 @@ public:
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
         QNetworkReply *reply = netmgr_->get(request);
-        connect(reply, &QNetworkReply::finished, this, &EasyMoneyStockApiProvider::onSearchFinished);
+        connect(reply, &QNetworkReply::finished, this, &EastMoneyStockApiProvider::onSearchFinished);
     }
 
     void getStockInfosAsync(const QStringList &codes) override
@@ -70,7 +70,7 @@ public:
         QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
         reply->setProperty("formattedCodes", formattedCodes);
-        connect(reply, &QNetworkReply::finished, this, &EasyMoneyStockApiProvider::onStockInfosFinished);
+        connect(reply, &QNetworkReply::finished, this, &EastMoneyStockApiProvider::onStockInfosFinished);
     }
 
 private slots:

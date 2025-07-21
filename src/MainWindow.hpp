@@ -44,7 +44,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr)
         : QFrame(parent)
         , config_(std::make_shared<StockConfig>())
-        , api_(StockApiService::instance().get("sina"))
+        , api_(StockApiService::instance().get(config_->apiSource))
         , titleBar_(new QWidget(this))
         , input_(new QLineEdit(this))
         , searchResultWidget_(new StockSearchWidget(config_, api_, this))
@@ -56,6 +56,7 @@ public:
         , refreshTimer_(new QTimer(this))
         , searchDelayTimer_(new QTimer(this))
     {
+        Logger::info(QString("Use %1 API").arg(api_->name()));
         setupUi();
         setupGlobalShortcut();
         setupSystemTray();
@@ -122,6 +123,8 @@ protected:
                     else
                     {
                         input_->clear();
+                        searchResultWidget_->hide();
+                        return true;
                     }
                     break;
                 case Qt::Key_Up:

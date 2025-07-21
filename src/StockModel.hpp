@@ -228,6 +228,7 @@ public:
         config_->stockCodes.append(code);
         stocks_[code] = StockInfo(code);
         endInsertRows();
+        config_->save();
     }
 
     void removeStock(int row)
@@ -239,8 +240,7 @@ public:
             config_->stockCodes.removeAt(row);
             stocks_.remove(code);
             endRemoveRows();
-            emit stockListChanged();
-            Logger::info(QString("Deleted stock %1 at row %2").arg(code).arg(row));
+            config_->save();
         }
     }
 
@@ -257,7 +257,7 @@ public:
                 QString code = config_->stockCodes.takeAt(from);
                 config_->stockCodes.insert(to, code);
                 endMoveRows();
-                emit stockListChanged();
+                config_->save();
             }
             else
             {
@@ -278,9 +278,6 @@ public:
         }
         return result;
     }
-
-signals:
-    void stockListChanged();
 
 private:
     QString formatVolume(long long volume) const
