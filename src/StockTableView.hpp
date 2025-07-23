@@ -97,17 +97,6 @@ public:
         model_->updateStocksDetail(arr);
     }
 
-    QList<StockInfo> stockData() const
-    {
-        return model_->stockData();
-    }
-
-    void setStockData(const QList<StockInfo> &stockData)
-    {
-        // Implementation if needed
-    }
-
-
 protected:
     void paintEvent(QPaintEvent *event) override
     {

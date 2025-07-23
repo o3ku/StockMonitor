@@ -19,12 +19,12 @@
 #include "Logger.hpp"
 #include "StockInfo.hpp"
 
-class StockSearchWidget : public QTableView
+class StockSearchResultTable : public QTableView
 {
     Q_OBJECT
 
 public:
-    explicit StockSearchWidget(const std::shared_ptr<StockConfig> &config, IStockApiProvider *api, QWidget *parent = nullptr)
+    explicit StockSearchResultTable(const std::shared_ptr<StockConfig> &config, IStockApiProvider *api, QWidget *parent = nullptr)
         : QTableView(parent)
         , config_(config)
         , model_(new QStandardItemModel(this))
@@ -41,9 +41,10 @@ public:
         this->setSelectionBehavior(QTableView::SelectRows);
         this->setSelectionMode(QTableView::SingleSelection);
         this->setEditTriggers(QTableView::NoEditTriggers);
+        this->setShowGrid(false);
         this->setModel(model_);
 
-        connect(this, &QTableView::activated, this, &StockSearchWidget::chooseCurrentRow);
+        connect(this, &QTableView::activated, this, &StockSearchResultTable::chooseCurrentRow);
         // connect(result_, &QTableView::itemClicked, this, [this](QListWidgetItem *item) {
         //     int row = result_->row(item);
         //     auto stock = stocks_.value(row);
@@ -56,18 +57,29 @@ public:
     void selectNextRow()
     {
         auto rows = model_->rowCount();
-        this->selectRow((this->currentIndex().row() + 1 + rows) % rows);
+        if (rows == 0) return;
+        
+        int nextRow = (this->currentIndex().row() + 1 + rows) % rows;
+        this->setCurrentIndex(model_->index(nextRow, 0));  // 设置当前项
+        this->selectRow(nextRow);  // 设置选中项
     }
     void selectPrevRow()
     {
         auto rows = model_->rowCount();
-        this->selectRow((this->currentIndex().row() - 1 + rows) % rows);
+        if (rows == 0) return;
+        
+        int prevRow = (this->currentIndex().row() - 1 + rows) % rows;
+        this->setCurrentIndex(model_->index(prevRow, 0));  // 设置当前项
+        this->selectRow(prevRow);  // 设置选中项
     }
     void chooseCurrentRow(const QModelIndex &index)
     {
-        auto code = model_->index(this->currentIndex().row(), 0).data(Qt::DisplayRole).toString();
-        hide();
-        emit stockSelected(code);
+        int row = index.isValid() ? index.row() : this->currentIndex().row();
+        if (row >= 0 && row < model_->rowCount()) {
+            auto code = model_->index(row, 0).data(Qt::DisplayRole).toString();
+            hide();
+            emit stockSelected(code);
+        }
     }
 
     void showResults(const QList<StockInfo> &results)
@@ -105,38 +117,6 @@ private:
     }
 
 private:
-    QWidget *createResultItem(const StockInfo &result, int index)
-    {
-        QWidget *itemWidget = new QWidget();
-        itemWidget->setFixedHeight(35);
-
-        QHBoxLayout *layout = new QHBoxLayout(itemWidget);
-        layout->setContentsMargins(5, 2, 5, 2);
-        layout->setSpacing(5);
-
-        // Stock code label
-        QLabel *codeLabel = new QLabel(result.code());
-        codeLabel->setObjectName("stockCodeLabel");
-        codeLabel->setFixedWidth(70);
-
-        // Stock name label
-        QLabel *nameLabel = new QLabel(result.name());
-        nameLabel->setObjectName("stockNameLabel");
-
-        layout->addWidget(codeLabel);
-        layout->addWidget(nameLabel);
-
-        return itemWidget;
-    }
-
-    void updateSelectedItem(int index)
-    {
-        // if (index >= 0 && index < result_->count())
-        //{
-        //    selectedIndex_ = index;
-        //    result_->setCurrentRow(index);
-        //}
-    }
 
     QList<StockInfo> sortResultsByMarket(const QList<StockInfo> &results) const
     {

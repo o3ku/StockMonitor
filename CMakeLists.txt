@@ -18,7 +18,12 @@ set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(Libs/QHotkey)
 
 file(GLOB_RECURSE SOURCES src/*.hpp src/*.cpp)
-add_executable(${PROJECT_NAME} ${SOURCES} res/main.qrc)
+
+if(WIN32)
+    add_executable(${PROJECT_NAME} ${SOURCES} res/main.qrc res/app.rc)
+else()
+    add_executable(${PROJECT_NAME} ${SOURCES} res/main.qrc)
+endif()
 target_link_libraries(${PROJECT_NAME} Qt::Core Qt::Widgets Qt::Network OpenSSL::SSL OpenSSL::Crypto qhotkey)
 
 if(WIN32)

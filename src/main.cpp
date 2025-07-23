@@ -15,15 +15,8 @@ int main(int argc, char *argv[])
     auto config = std::make_shared<StockConfig>();
     MainWindow window(config);
     QHotkey hotkey(QKeySequence(config->hotkey), true, &app);
-    QObject::connect(&hotkey, &QHotkey::activated, qApp, [&]() {
-        if (window.isActiveWindow())
-            window.hide();
-        else
-        {
-            window.activateWindow();
-            window.show();
-        }
-    });
+    QObject::connect(&hotkey, &QHotkey::activated, &window, &MainWindow::toggleActive);
+    window.show();
 
     return app.exec();
 }

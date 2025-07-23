@@ -29,7 +29,7 @@
 #include "StockApiService.hpp"
 #include "StockConfig.hpp"
 #include "StockInfo.hpp"
-#include "StockSearchResultWindow.hpp"
+#include "StockSearchResultTable.hpp"
 #include "StockTableView.hpp"
 
 class MainWindow : public QFrame
@@ -43,7 +43,7 @@ public:
         , api_(StockApiService::instance().get(config_->apiSource))
         , titleBar_(new QWidget(this))
         , input_(new QLineEdit(this))
-        , searchResultWidget_(new StockSearchWidget(config_, api_, this))
+        , searchResultWidget_(new StockSearchResultTable(config_, api_, this))
         , btns_({
               createTitleBarButton(":/%1/theme-toggle.svg", "Switch Theme", &MainWindow::toggleTheme),
               createTitleBarButton(":/%1/close-button.svg", "Close", &MainWindow::onCloseButtonClicked),
@@ -51,8 +51,15 @@ public:
         , table_(new StockTableView(config_, this))
         , refreshTimer_(new QTimer(this))
         , searchDelayTimer_(new QTimer(this))
+        , labels_({
+              { "SH000001", { "沪", new QLabel(this) } },
+              { "SZ399001", { "深", new QLabel(this) } },
+              { "SZ399006", { "创", new QLabel(this) } },
+          })
     {
         Logger::info(QString("Use %1 API").arg(api_->name()));
+        config_->apiSource = api_->name();
+
         setupUi();
         setupSystemTray();
         applyTheme();
@@ -65,7 +72,7 @@ public:
         connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
         connect(api_, &IStockApiProvider::errorOccurred, this, [] {
         });
-        connect(api_, &IStockApiProvider::stockInfosReceived, table_, &StockTableView::updateStocksDetail);
+        connect(api_, &IStockApiProvider::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
 
         connect(input_, &QLineEdit::textChanged, this, [this](auto &&text) {
             if (text.isEmpty())
@@ -76,8 +83,6 @@ public:
             searchDelayTimer_->start(500);
         });
         connect(searchDelayTimer_, &QTimer::timeout, this, [this] {
-            // showInputMode();
-            // result_->hide();
             input_->setFocus();
             auto text = input_->text().trimmed();
             if (text.isEmpty())
@@ -88,8 +93,8 @@ public:
             qDebug() << "search stock" << api_->name() << text;
             api_->searchStocksAsync(text);
         });
-        connect(api_, &IStockApiProvider::searchCompleted, searchResultWidget_, &StockSearchWidget::showResults);
-        connect(searchResultWidget_, &StockSearchWidget::stockSelected, this, [this](auto &&code) {
+        connect(api_, &IStockApiProvider::searchCompleted, searchResultWidget_, &StockSearchResultTable::showResults);
+        connect(searchResultWidget_, &StockSearchResultTable::stockSelected, this, [this](auto &&code) {
             searchResultWidget_->hide();
             input_->clear();
             input_->setFocus();
@@ -106,6 +111,21 @@ public:
     ~MainWindow()
     {
     }
+
+public:
+    void toggleActive()
+    {
+        if (isActiveWindow())
+        {
+            hide();
+        }
+        else
+        {
+            input_->setFocus();
+            activateWindow();
+            show();
+        }
+    };
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override
@@ -131,14 +151,14 @@ protected:
                     break;
                 case Qt::Key_Up:
                     searchResultWidget_->selectPrevRow();
-                    break;
+                    return true;
                 case Qt::Key_Down:
                     searchResultWidget_->selectNextRow();
-                    break;
+                    return true;
                 case Qt::Key_Return:
                 case Qt::Key_Enter:
                     searchResultWidget_->chooseCurrentRow(searchResultWidget_->currentIndex());
-                    break;
+                    return true;
                 }
             }
             else if (watched == this && key == Qt::Key_Escape)
@@ -198,8 +218,21 @@ protected:
 private:
     void startRefresh()
     {
-        api_->getStockInfosAsync(config_->stockCodes);
-        refreshTimer_->start(1000);
+        api_->getStockInfosAsync(config_->stockCodes + labels_.keys());
+        refreshTimer_->start(config_->refreshInterval);
+    }
+
+    void handleStockInfosReceived(const QList<StockInfo> &stockInfos)
+    {
+        for (const StockInfo &info : stockInfos)
+        {
+            auto &&[title, label] = labels_.value(info.code());
+            if (label != nullptr)
+                label->setText(
+                    QString("%1 <span style=\"color:%2\">%3</span>").arg(title).arg(config_->getPriceColor(info.isUp()).name()).arg(info.changePercentText()));
+        }
+
+        table_->updateStocksDetail(stockInfos);
     }
 
     void onApiError(const QString &error)
@@ -276,8 +309,7 @@ private:
         titleLayout->setContentsMargins(5, 5, 5, 5);
         titleLayout->setSpacing(0);
         titleLayout->addWidget(input_, 1);
-        titleLayout->addSpacing(20);
-        titleLayout->addWidget(btns_[0]);
+        titleLayout->addSpacing(30);
         titleLayout->addWidget(btns_[1]);
 
         auto wrap = new QVBoxLayout;
@@ -285,9 +317,15 @@ private:
         wrap->addWidget(table_, 1);
 
         auto statusBar = new QStatusBar(this);
+        statusBar->setContentsMargins(0, 0, 0, 0);
+        statusBar->addWidget(btns_[0]);
+        for (auto &&pair : labels_.values())
+        {
+            statusBar->addWidget(pair.second);
+        }
 
         auto layout = new QVBoxLayout(this);
-        layout->setContentsMargins(2, 2, 2, 2);
+        layout->setContentsMargins({});
         layout->setSpacing(5);
         layout->addWidget(titleBar_);
         layout->addLayout(wrap, 1);
@@ -365,7 +403,7 @@ private:
 
     QWidget *titleBar_;
     QLineEdit *input_;
-    StockSearchWidget *searchResultWidget_;
+    StockSearchResultTable *searchResultWidget_;
     QList<QPushButton *> btns_;
     StockTableView *table_;
 
@@ -373,4 +411,6 @@ private:
 
     QTimer *refreshTimer_;
     QTimer *searchDelayTimer_;
+
+    QMap<QString, QPair<QString, QLabel *>> labels_;
 };

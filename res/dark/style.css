@@ -36,21 +36,6 @@ QWidget#titleBar {
     border-color: #0078d4;
 }
 
-/* Search Result Window Colors */
-QListWidget#searchResultsList {
-    background-color: #3c3c3c;
-    border-color: #555555;
-    color: #ffffff;
-    selection-background-color: #0078d4;
-}
-
-QListWidget#searchResultsList::item:selected {
-    background-color: #0078d4;
-}
-
-QListWidget#searchResultsList::item:hover {
-    background-color: #404040;
-}
 
 /* Add Button Colors */
 QPushButton#addButton {
@@ -64,19 +49,6 @@ QPushButton#addButton:hover {
 
 QPushButton#addButton:pressed {
     background-color: #005a9e;
-}
-
-/* Label Colors */
-QLabel#stockCodeLabel {
-    color: #4fc3f7;
-}
-
-QLabel#stockNameLabel {
-    color: #ffffff;
-}
-
-QLabel#marketLabel {
-    color: #cccccc;
 }
 
 /* Table View Colors - Minimalist Dark Theme */
@@ -100,25 +72,12 @@ QTableView::item:hover {
 }
 
 QTableView::item:selected {
-    background-color: #1a1a1a !important;
+    background-color: #1a1a1a;
 }
 
-QTableView::item:selected:hover {
-    background-color: #1a1a1a !important;
+StockSearchResultTable::item::selected {
+    color: white;
 }
-
-QTableView::item:selected:focus {
-    background-color: #1a1a1a !important;
-}
-
-QTableView::item:selected:focus:hover {
-    background-color: #1a1a1a !important;
-}
-
-QTableView::item:selected:active {
-    background-color: #1a1a1a !important;
-}
-
 
 
 QHeaderView::section {

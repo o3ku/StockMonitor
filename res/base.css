@@ -13,7 +13,8 @@ QWidget#titleBar {
     border-bottom: 1px solid;
 }
 
-#titleBar QPushButton {
+#titleBar QPushButton,
+QStatusBar QPushButton {
     border: none;
     border-radius: 15px;
 }
@@ -25,21 +26,6 @@ QWidget#titleBar {
 
 #searchInput:focus {
     outline: none;
-}
-
-/* Search Result Window Styles */
-QListWidget#searchResultsList {
-    border: 1px solid;
-}
-
-QListWidget#searchResultsList::item {
-    border: none;
-    padding: 0px;
-}
-
-/* Stock Code Label */
-QLabel#stockCodeLabel {
-    font-weight: bold;
 }
 
 
@@ -80,4 +66,13 @@ QSizeGrip {
 QSizeGrip::corner {
     border: 1px solid;
     border-radius: 2px;
+}
+
+/* Status Bar Styles */
+QStatusBar {
+    min-height: 25px;
+}
+
+QStatusBar QPushButton {
+    margin: 2px;
 }

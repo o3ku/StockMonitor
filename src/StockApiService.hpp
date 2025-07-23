@@ -1,11 +1,9 @@
 #pragma once
 
-#include "api/EasyMoneyStockApiProvider.hpp"
+#include "api/EastMoneyStockApiProvider.hpp"
 #include "api/IStockApiProvider.hpp"
-#include "api/NeteaseStockApiProvider.hpp"
 #include "api/SinaStockApiProvider.hpp"
 #include "api/TencentStockApiProvider.hpp"
-#include "api/XueqiuStockApiProvider.hpp"
 #include <functional>
 #include <memory>
 
@@ -21,9 +19,12 @@ public:
         return inst;
     }
 
-    IStockApiProvider *get(const QString &src)
+    IStockApiProvider *get(QString src)
     {
-        Q_ASSERT(apis_.contains(src));
+        if (!apis_.contains(src))
+        {
+            src = "sina";
+        }
         return apis_.value(src)();
     }
 
@@ -41,17 +42,9 @@ private:
             []() {
                 return new TencentStockApiProvider();
             } },
-        { "netease",
+        { "eastmoney",
             []() {
-                return new NeteaseStockApiProvider();
-            } },
-        { "easymoney",
-            []() {
-                return new EasyMoneyStockApiProvider();
-            } },
-        { "xueqiu",
-            []() {
-                return new XueqiuStockApiProvider();
+                return new EastMoneyStockApiProvider();
             } },
     };
 };
