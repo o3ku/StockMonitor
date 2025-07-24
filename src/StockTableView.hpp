@@ -55,9 +55,9 @@ public:
     explicit StockTableView(const std::shared_ptr<StockConfig> &config, QWidget *parent = nullptr)
         : QTableView(parent)
         , model_(new StockModel(config, this))
-        , m_dropIndicatorRow(-1)
+        , dopIndicatorRow_(-1)
     {
-        setupView();
+        setupView(config->rowHeight);
         setupContextMenu();
 
         setModel(model_);
@@ -103,13 +103,13 @@ protected:
         QTableView::paintEvent(event);
 
         // Draw custom drop indicator for full row
-        if (m_dropIndicatorRow >= 0)
+        if (dopIndicatorRow_ >= 0)
         {
             QPainter painter(viewport());
             painter.setPen(QPen(QColor(0, 120, 215), 2));  // Blue line
 
             int y;
-            if (m_dropIndicatorRow >= model()->rowCount())
+            if (dopIndicatorRow_ >= model()->rowCount())
             {
                 // Drop at the end
                 QRect lastRowRect = visualRect(model()->index(model()->rowCount() - 1, 0));
@@ -118,7 +118,7 @@ protected:
             else
             {
                 // Drop before the specified row
-                QRect rowRect = visualRect(model()->index(m_dropIndicatorRow, 0));
+                QRect rowRect = visualRect(model()->index(dopIndicatorRow_, 0));
                 y = rowRect.top() - 1;
             }
 
@@ -131,7 +131,7 @@ protected:
         if (event->source() == this && event->mimeData()->hasFormat(StockConstants::STOCK_ROW_MIME_TYPE))
         {
             event->acceptProposedAction();
-            m_dropIndicatorRow = -1;
+            dopIndicatorRow_ = -1;
             viewport()->update();
         }
         else
@@ -165,9 +165,9 @@ protected:
                 newDropRow = model()->rowCount();
             }
 
-            if (newDropRow != m_dropIndicatorRow)
+            if (newDropRow != dopIndicatorRow_)
             {
-                m_dropIndicatorRow = newDropRow;
+                dopIndicatorRow_ = newDropRow;
                 viewport()->update();
             }
 
@@ -181,14 +181,14 @@ protected:
 
     void dragLeaveEvent(QDragLeaveEvent *event) override
     {
-        m_dropIndicatorRow = -1;
+        dopIndicatorRow_ = -1;
         viewport()->update();
         QTableView::dragLeaveEvent(event);
     }
 
     void dropEvent(QDropEvent *event) override
     {
-        m_dropIndicatorRow = -1;
+        dopIndicatorRow_ = -1;
         viewport()->update();
         QTableView::dropEvent(event);
     }
@@ -266,7 +266,7 @@ private slots:
     }
 
 private:
-    void setupView()
+    void setupView(int rowHeight)
     {
         setSelectionBehavior(QAbstractItemView::SelectRows);
         setSelectionMode(QAbstractItemView::SingleSelection);
@@ -281,12 +281,14 @@ private:
         setEditTriggers(QAbstractItemView::NoEditTriggers);
         setFocusPolicy(Qt::StrongFocus);
         setSortingEnabled(false);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
         horizontalHeader()->setStretchLastSection(true);
         horizontalHeader()->setHighlightSections(false);
         horizontalHeader()->setDefaultAlignment(Qt::AlignLeft);
-
-        verticalHeader()->setVisible(false);
+        horizontalHeader()->hide();
+        verticalHeader()->hide();
+        verticalHeader()->setDefaultSectionSize(rowHeight);
 
         setItemDelegate(new ColorPreservingDelegate(this));
     }
@@ -313,7 +315,5 @@ private:
     QAction *actDown_;
     QAction *actTop_;
     QAction *actBottom_;
-
-    // Drag and drop indicator
-    int m_dropIndicatorRow;
+    int dopIndicatorRow_;
 };

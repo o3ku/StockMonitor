@@ -18,6 +18,8 @@ struct StockConfig
     QString theme{ "light" };
     qreal windowOpacity{ 1.0 };
     int refreshInterval{ 5000 };
+    QByteArray lastGeometry;
+    int rowHeight{ 25 };
 
     QStringList availableThemes{ "light", "dark" };
 
@@ -33,6 +35,8 @@ struct StockConfig
         theme = settings.value("Theme", "light").toString();
         windowOpacity = settings.value("WindowOpacity", 1.0).toReal();
         refreshInterval = settings.value("RefreshInterval", 5000).toInt();
+        lastGeometry = settings.value("Rect").toByteArray();
+        rowHeight = settings.value("RowHeight", 25).toInt();
         settings.endGroup();
 
         hotkey = settings.value("Hotkey/Global", "Ctrl+Alt+S").toString();
@@ -54,6 +58,8 @@ struct StockConfig
         settings.setValue("Theme", theme);
         settings.setValue("WindowOpacity", QString::number(windowOpacity, 'f', 2));
         settings.setValue("RefreshInterval", refreshInterval);
+        settings.setValue("Rect", lastGeometry);
+        settings.setValue("RowHeight", rowHeight);
         settings.endGroup();
 
         settings.setValue("Hotkey/Global", hotkey);

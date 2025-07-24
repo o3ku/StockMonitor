@@ -21,7 +21,7 @@ file(GLOB_RECURSE SOURCES src/*.hpp src/*.cpp)
 
 if(WIN32)
     add_executable(${PROJECT_NAME} ${SOURCES} res/main.qrc res/app.rc)
-else()
+    else()
     add_executable(${PROJECT_NAME} ${SOURCES} res/main.qrc)
 endif()
 target_link_libraries(${PROJECT_NAME} Qt::Core Qt::Widgets Qt::Network OpenSSL::SSL OpenSSL::Crypto qhotkey)
@@ -30,4 +30,13 @@ if(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
     target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        add_custom_command(TARGET ${PROJECT_NAME}
+        POST_BUILD
+        COMMAND upx -9 $<TARGET_FILE:${PROJECT_NAME}>
+        COMMENT "Compressing syncqt with UPX -9"
+        VERBATIM
+        )
+    endif()
 endif()

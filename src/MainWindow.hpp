@@ -106,10 +106,13 @@ public:
         titleBar_->installEventFilter(this);
         input_->installEventFilter(this);
         searchResultWidget_->installEventFilter(this);
+
+        if (!config->lastGeometry.isEmpty()) restoreGeometry(config->lastGeometry);
     }
 
     ~MainWindow()
     {
+        config_->lastGeometry = saveGeometry();
     }
 
 public:
@@ -117,10 +120,12 @@ public:
     {
         if (isActiveWindow())
         {
+            config_->lastGeometry = saveGeometry();
             hide();
         }
         else
         {
+            if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
             input_->setFocus();
             activateWindow();
             show();
@@ -228,8 +233,11 @@ private:
         {
             auto &&[title, label] = labels_.value(info.code());
             if (label != nullptr)
-                label->setText(
-                    QString("%1 <span style=\"color:%2\">%3</span>").arg(title).arg(config_->getPriceColor(info.isUp()).name()).arg(info.changePercentText()));
+                label->setText(QString("<span style=\"color:%0\">%1</span><span style=\"color:%2\">%3</span>")
+                        .arg(config_->getTextColor().name())
+                        .arg(title)
+                        .arg(config_->getPriceColor(info.isUp()).name())
+                        .arg(info.changePercentText()));
         }
 
         table_->updateStocksDetail(stockInfos);
@@ -300,7 +308,7 @@ private:
         setWindowFlag(Qt::WindowSystemMenuHint, false);
         setWindowTitle("Stock Monitor");
         setWindowIcon(QIcon(":/app-icon.svg"));
-        setMinimumSize(250, 200);
+        setMinimumSize(260, 200);
 
         input_->setObjectName("searchInput");
         titleBar_->setFixedHeight(40);
@@ -313,7 +321,7 @@ private:
         titleLayout->addWidget(btns_[1]);
 
         auto wrap = new QVBoxLayout;
-        wrap->setContentsMargins(5, 5, 5, 5);
+        wrap->setContentsMargins(5, 0, 5, 0);
         wrap->addWidget(table_, 1);
 
         auto statusBar = new QStatusBar(this);
@@ -326,7 +334,7 @@ private:
 
         auto layout = new QVBoxLayout(this);
         layout->setContentsMargins({});
-        layout->setSpacing(5);
+        layout->setSpacing(0);
         layout->addWidget(titleBar_);
         layout->addLayout(wrap, 1);
         layout->addWidget(statusBar);
