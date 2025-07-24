@@ -217,10 +217,10 @@ public:
         {
             if (!config_->stockCodes.contains(it.code())) continue;
             stocks_[it.code()] = it;
-            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), { Qt::DisplayRole });
+            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), { Qt::DisplayRole, Qt::ForegroundRole });
         }
     }
-
+    
     void addStock(const QString &code)
     {
         if (config_->stockCodes.contains(code)) return;

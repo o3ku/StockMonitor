@@ -86,9 +86,3 @@ QHeaderView::section {
     border-bottom-color: #404040;
     font-size: 13px;
 }
-
-/* Resize Grip Colors */
-QSizeGrip::corner {
-    background-color: #555555;
-    border-color: #777777;
-}

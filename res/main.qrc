@@ -7,9 +7,11 @@
         <file>light/style.css</file>
         <file>light/close-button.svg</file>
         <file>light/theme-toggle.svg</file>
+        <file>light/settings.svg</file>
 
         <file>dark/style.css</file>
         <file>dark/close-button.svg</file>
         <file>dark/theme-toggle.svg</file>
+        <file>dark/settings.svg</file>
     </qresource>
 </RCC>

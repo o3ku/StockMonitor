@@ -56,23 +56,3 @@ QHeaderView::section {
     border: none;
     border-bottom: 1px solid;
 }
-
-/* Resize Grip Styles */
-QSizeGrip {
-    background-color: transparent;
-    border: none;
-}
-
-QSizeGrip::corner {
-    border: 1px solid;
-    border-radius: 2px;
-}
-
-/* Status Bar Styles */
-QStatusBar {
-    min-height: 25px;
-}
-
-QStatusBar QPushButton {
-    margin: 2px;
-}

@@ -54,6 +54,7 @@ class StockTableView : public QTableView
 public:
     explicit StockTableView(const std::shared_ptr<StockConfig> &config, QWidget *parent = nullptr)
         : QTableView(parent)
+        , config_(config)
         , model_(new StockModel(config, this))
         , dopIndicatorRow_(-1)
     {
@@ -96,7 +97,7 @@ public:
     {
         model_->updateStocksDetail(arr);
     }
-
+    
 protected:
     void paintEvent(QPaintEvent *event) override
     {
@@ -106,7 +107,8 @@ protected:
         if (dopIndicatorRow_ >= 0)
         {
             QPainter painter(viewport());
-            painter.setPen(QPen(QColor(0, 120, 215), 2));  // Blue line
+            QColor indicatorColor = config_->isDarkTheme() ? QColor(0, 160, 255) : QColor(0, 120, 215);
+            painter.setPen(QPen(indicatorColor, 2));
 
             int y;
             if (dopIndicatorRow_ >= model()->rowCount())
@@ -308,6 +310,7 @@ private:
     }
 
 private:
+    std::shared_ptr<StockConfig> config_;
     StockModel *model_;
     QMenu *menu_;
     QAction *actDelete_;

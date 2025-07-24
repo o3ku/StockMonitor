@@ -2,8 +2,13 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
 #include <QDateTime>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QFile>
+#include <QFormLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QKeyEvent>
@@ -18,8 +23,10 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSizeGrip>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QSystemTrayIcon>
+#include <QTabWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -28,6 +35,7 @@
 #include "Logger.hpp"
 #include "StockApiService.hpp"
 #include "StockConfig.hpp"
+#include "StockConfigDialog.hpp"
 #include "StockInfo.hpp"
 #include "StockSearchResultTable.hpp"
 #include "StockTableView.hpp"
@@ -40,13 +48,12 @@ public:
     explicit MainWindow(const std::shared_ptr<StockConfig> &config, QWidget *parent = nullptr)
         : QFrame(parent)
         , config_(config)
-        , api_(StockApiService::instance().get(config_->apiSource))
         , titleBar_(new QWidget(this))
         , input_(new QLineEdit(this))
-        , searchResultWidget_(new StockSearchResultTable(config_, api_, this))
+        , searchResultWidget_(new StockSearchResultTable(config_, this))
         , btns_({
-              createTitleBarButton(":/%1/theme-toggle.svg", "Switch Theme", &MainWindow::toggleTheme),
               createTitleBarButton(":/%1/close-button.svg", "Close", &MainWindow::onCloseButtonClicked),
+              createTitleBarButton(":/%1/settings.svg", "Settings", &MainWindow::openSettings),
           })
         , table_(new StockTableView(config_, this))
         , refreshTimer_(new QTimer(this))
@@ -57,22 +64,16 @@ public:
               { "SZ399006", { "创", new QLabel(this) } },
           })
     {
-        Logger::info(QString("Use %1 API").arg(api_->name()));
-        config_->apiSource = api_->name();
-
         setupUi();
         setupSystemTray();
         applyTheme();
-        startRefresh();
+        applyApiSource();
 
         setAttribute(Qt::WA_DeleteOnClose, false);
         refreshTimer_->setSingleShot(true);
         searchDelayTimer_->setSingleShot(true);
 
         connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
-        connect(api_, &IStockApiProvider::errorOccurred, this, [] {
-        });
-        connect(api_, &IStockApiProvider::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
 
         connect(input_, &QLineEdit::textChanged, this, [this](auto &&text) {
             if (text.isEmpty())
@@ -90,10 +91,8 @@ public:
                 searchResultWidget_->hide();
                 return;
             }
-            qDebug() << "search stock" << api_->name() << text;
             api_->searchStocksAsync(text);
         });
-        connect(api_, &IStockApiProvider::searchCompleted, searchResultWidget_, &StockSearchResultTable::showResults);
         connect(searchResultWidget_, &StockSearchResultTable::stockSelected, this, [this](auto &&code) {
             searchResultWidget_->hide();
             input_->clear();
@@ -268,6 +267,17 @@ private:
         }
     }
 
+    void openSettings()
+    {
+        StockConfigDialog dialog(config_, this);
+        if (dialog.exec() == QDialog::Accepted)
+        {
+            config_->save();
+            applyTheme();
+            applyApiSource();
+        }
+    }
+
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
     {
         if (reason == QSystemTrayIcon::Trigger)  // Left click
@@ -318,7 +328,7 @@ private:
         titleLayout->setSpacing(0);
         titleLayout->addWidget(input_, 1);
         titleLayout->addSpacing(30);
-        titleLayout->addWidget(btns_[1]);
+        titleLayout->addWidget(btns_[0]);
 
         auto wrap = new QVBoxLayout;
         wrap->setContentsMargins(5, 0, 5, 0);
@@ -326,7 +336,7 @@ private:
 
         auto statusBar = new QStatusBar(this);
         statusBar->setContentsMargins(0, 0, 0, 0);
-        statusBar->addWidget(btns_[0]);
+        statusBar->addWidget(btns_[1]);
         for (auto &&pair : labels_.values())
         {
             statusBar->addWidget(pair.second);
@@ -391,9 +401,22 @@ private:
             }
         };
 
-        style()->unpolish(this);
-        setStyleSheet(css.join("\n"));
-        style()->polish(this);
+        qApp->style()->unpolish(qApp);
+        qApp->setStyleSheet(css.join("\n"));
+        qApp->style()->polish(qApp);
+    }
+
+    void applyApiSource()
+    {
+        api_ = StockApiService::instance().get(config_->apiSource);
+        Logger::info(QString("Use %1 API").arg(api_->name()));
+        config_->apiSource = api_->name();
+
+        connect(api_, &IStockApiProvider::errorOccurred, this, [] {
+        });
+        connect(api_, &IStockApiProvider::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
+        connect(api_, &IStockApiProvider::searchCompleted, searchResultWidget_, &StockSearchResultTable::showResults);
+        startRefresh();
     }
 
     void updateButtonIcons()

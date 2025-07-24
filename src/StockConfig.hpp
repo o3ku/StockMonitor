@@ -68,6 +68,7 @@ struct StockConfig
 
     bool isDarkTheme() const
     {
+        qDebug() << theme;
         return theme == "dark";
     }
 
