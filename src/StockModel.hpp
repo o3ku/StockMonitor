@@ -224,8 +224,8 @@ public:
     void addStock(const QString &code)
     {
         if (config_->stockCodes.contains(code)) return;
-        beginInsertRows(QModelIndex(), rowCount(), rowCount());
-        config_->stockCodes.append(code);
+        beginInsertRows(QModelIndex(), 0, 0);
+        config_->stockCodes.prepend(code);
         stocks_[code] = StockInfo(code);
         endInsertRows();
         config_->save();

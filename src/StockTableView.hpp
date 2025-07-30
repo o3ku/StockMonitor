@@ -91,13 +91,41 @@ public:
     void addStock(const QString &stock)
     {
         model_->addStock(stock);
+        auto row0 = model_->index(0, 0);
+        setCurrentIndex(row0);
+        scrollTo(row0);
+        selectRow(0);
+    }
+
+    void removeCurrent()
+    {
+        onDeleteStock();
     }
 
     void updateStocksDetail(const QList<StockInfo> &arr)
     {
         model_->updateStocksDetail(arr);
     }
-    
+
+    void selectNextRow()
+    {
+        auto rows = model_->rowCount();
+        if (rows == 0) return;
+
+        int nextRow = (this->currentIndex().row() + 1 + rows) % rows;
+        this->setCurrentIndex(model_->index(nextRow, 0));
+        this->selectRow(nextRow);
+    }
+    void selectPrevRow()
+    {
+        auto rows = model_->rowCount();
+        if (rows == 0) return;
+
+        int prevRow = (this->currentIndex().row() - 1 + rows) % rows;
+        this->setCurrentIndex(model_->index(prevRow, 0));
+        this->selectRow(prevRow);
+    }
+
 protected:
     void paintEvent(QPaintEvent *event) override
     {
@@ -195,22 +223,22 @@ protected:
         QTableView::dropEvent(event);
     }
 
-    void keyPressEvent(QKeyEvent *event) override
-    {
-        if (event->key() == Qt::Key_Delete)
-        {
-            QModelIndex currentIndex = this->currentIndex();
-            if (currentIndex.isValid())
-            {
-                onDeleteStock();
-            }
-            event->accept();
-        }
-        else
-        {
-            QTableView::keyPressEvent(event);
-        }
-    }
+    // void keyPressEvent(QKeyEvent *event) override
+    // {
+    //     if (event->key() == Qt::Key_Delete)
+    //     {
+    //         QModelIndex currentIndex = this->currentIndex();
+    //         if (currentIndex.isValid())
+    //         {
+    //             onDeleteStock();
+    //         }
+    //         event->accept();
+    //     }
+    //     else
+    //     {
+    //         QTableView::keyPressEvent(event);
+    //     }
+    // }
 
 private slots:
     void onDeleteStock()

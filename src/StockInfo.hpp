@@ -238,40 +238,20 @@ public:
 
     QString detailedTooltip() const
     {
-        return QString("股票代码: %1\n"
-                       "股票名称: %2\n"
-                       "当前价格: %3\n"
-                       "涨跌额: %4\n"
-                       "涨跌幅: %5\n"
-                       "开盘价: %6\n"
-                       "昨收价: %7\n"
-                       "最高价: %8\n"
-                       "最低价: %9\n"
-                       "成交量: %10\n"
-                       "成交额: %11\n"
-                       "买一价: %12 (%13手)\n"
-                       "卖一价: %14 (%15手)\n"
-                       "交易日期: %16\n"
-                       "交易时间: %17\n"
-                       "更新时间: %18")
-            .arg(m_code)
+        return QString("%1(%2) %3(%4)\n"
+                       "成交: %5(%6)\n"
+                       "买一: %7(%8手)\n"
+                       "卖一: %9(%10手)")
             .arg(m_name)
+            .arg(m_code)
             .arg(QString::number(m_currentPrice, 'f', 2))
-            .arg(changeText())
             .arg(changePercentText())
-            .arg(QString::number(m_openPrice, 'f', 2))
-            .arg(QString::number(m_yesterday, 'f', 2))
-            .arg(QString::number(m_high, 'f', 2))
-            .arg(QString::number(m_low, 'f', 2))
-            .arg(volumeText())
             .arg(turnoverText())
+            .arg(volumeText())
             .arg(QString::number(m_bid1, 'f', 2))
             .arg(m_bid1Volume / 100)  // 转换为手
             .arg(QString::number(m_ask1, 'f', 2))
-            .arg(m_ask1Volume / 100)  // 转换为手
-            .arg(m_tradeDate)
-            .arg(m_tradeTime)
-            .arg(m_lastUpdate.toString("hh:mm:ss"));
+            .arg(m_ask1Volume / 100);  // 转换为手
     }
 
 private:

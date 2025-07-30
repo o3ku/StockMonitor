@@ -3,7 +3,6 @@
 #include "StockInfo.hpp"
 #include <QApplication>
 #include <QColor>
-#include <QDebug>
 #include <QDir>
 #include <QObject>
 #include <QSettings>
@@ -68,7 +67,6 @@ struct StockConfig
 
     bool isDarkTheme() const
     {
-        qDebug() << theme;
         return theme == "dark";
     }
 

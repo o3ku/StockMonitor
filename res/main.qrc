@@ -2,7 +2,6 @@
     <qresource prefix="/">
         <file>base.css</file>
         <file>app-icon.svg</file>
-        <file>app-icon-256.svg</file>
 
         <file>light/style.css</file>
         <file>light/close-button.svg</file>

@@ -1,24 +1,14 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <!-- 深蓝色背景圆角矩形 -->
-  <rect x="4" y="4" width="56" height="56" rx="12" ry="12" fill="#2c3e50" stroke="#1a252f" stroke-width="1"/>
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <!-- 默认使用浅色主题版本：中国古铜钱形状，浅色设计适合深色背景 -->
   
-  <!-- 股票图表线条 -->
-  <g stroke="#e74c3c" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <!-- 上升趋势线 -->
-    <polyline points="12,45 20,38 28,42 36,32 44,28 52,22"/>
-
-    <!-- 数据点 -->
-    <circle cx="12" cy="45" r="2" fill="#e74c3c"/>
-    <circle cx="20" cy="38" r="2" fill="#e74c3c"/>
-    <circle cx="28" cy="42" r="2" fill="#e74c3c"/>
-    <circle cx="36" cy="32" r="2" fill="#c0392b"/>
-    <circle cx="44" cy="28" r="2" fill="#c0392b"/>
-    <circle cx="52" cy="22" r="2" fill="#c0392b"/>
-  </g>
+  <!-- 使用路径创建带中间空洞的圆形 -->
+  <path d="M 128 1 A 127 127 0 1 1 128 255 A 127 127 0 1 1 128 1 Z M 92 92 L 164 92 L 164 164 L 92 164 Z"
+        fill="#afafaf"
+        stroke="#95a5a6"
+        stroke-width="2"
+        fill-rule="evenodd"/>
   
-  <!-- 简化的坐标轴 -->
-  <g stroke="#7f8c8d" stroke-width="1" opacity="0.6">
-    <line x1="10" y1="50" x2="54" y2="50"/>
-    <line x1="10" y1="50" x2="10" y2="18"/>
-  </g>
+  <!-- 中间正方形边框 -->
+  <rect x="92" y="92" width="72" height="72" fill="none" stroke="#95a5a6" stroke-width="2"/>
+  
 </svg>

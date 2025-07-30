@@ -139,13 +139,16 @@ protected:
         {
             auto ke = static_cast<QKeyEvent *>(event);
             auto key = ke->key();
-            if (watched == input_ || watched == searchResultWidget_)
+            if (watched == input_ || watched == searchResultWidget_ || watched == this || watched == table_)
             {
                 switch (key)
                 {
                 case Qt::Key_Escape:
                     if (input_->text().isEmpty())
-                        return eventFilter(this, event);
+                    {
+                        hide();
+                        return true;
+                    }
                     else
                     {
                         input_->clear();
@@ -154,20 +157,29 @@ protected:
                     }
                     break;
                 case Qt::Key_Up:
-                    searchResultWidget_->selectPrevRow();
+                    if (searchResultWidget_->isVisible())
+                        searchResultWidget_->selectPrevRow();
+                    else
+                        table_->selectPrevRow();
                     return true;
                 case Qt::Key_Down:
-                    searchResultWidget_->selectNextRow();
+                    if (searchResultWidget_->isVisible())
+                        searchResultWidget_->selectNextRow();
+                    else
+                        table_->selectNextRow();
                     return true;
                 case Qt::Key_Return:
                 case Qt::Key_Enter:
-                    searchResultWidget_->chooseCurrentRow(searchResultWidget_->currentIndex());
+                    if (searchResultWidget_->isVisible()) searchResultWidget_->chooseCurrentRow(searchResultWidget_->currentIndex());
                     return true;
+                case Qt::Key_Delete:
+                    if (input_->text().isEmpty())
+                    {
+                        table_->removeCurrent();
+                        return true;
+                    }
+                    break;
                 }
-            }
-            else if (watched == this && key == Qt::Key_Escape)
-            {
-                hide();
             }
         }
         else if (watched == this && etype == QEvent::Wheel && ((QWheelEvent *)event)->modifiers() & Qt::AltModifier)
@@ -232,11 +244,15 @@ private:
         {
             auto &&[title, label] = labels_.value(info.code());
             if (label != nullptr)
+            {
                 label->setText(QString("<span style=\"color:%0\">%1</span><span style=\"color:%2\">%3</span>")
                         .arg(config_->getTextColor().name())
                         .arg(title)
                         .arg(config_->getPriceColor(info.isUp()).name())
                         .arg(info.changePercentText()));
+                // 设置tooltip，与表格保持一致
+                label->setToolTip(info.detailedTooltip());
+            }
         }
 
         table_->updateStocksDetail(stockInfos);

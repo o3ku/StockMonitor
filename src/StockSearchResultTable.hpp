@@ -86,6 +86,7 @@ public:
         model_->setColumnCount(2);
         for (auto &&it : results)
         {
+            if (config_->stockCodes.contains(it.code())) continue;
             model_->appendRow({ new QStandardItem(it.code()), new QStandardItem(it.name()) });
         }
         show();
