@@ -19,6 +19,7 @@ struct StockConfig
     int refreshInterval{ 5000 };
     QByteArray lastGeometry;
     int rowHeight{ 25 };
+    int autoHideDelay{ 0 };
 
     QStringList availableThemes{ "light", "dark" };
 
@@ -36,6 +37,7 @@ struct StockConfig
         refreshInterval = settings.value("RefreshInterval", 5000).toInt();
         lastGeometry = settings.value("Rect").toByteArray();
         rowHeight = settings.value("RowHeight", 25).toInt();
+        autoHideDelay = settings.value("AutoHideSeconds", 0).toInt();
         settings.endGroup();
 
         hotkey = settings.value("Hotkey/Global", "Ctrl+Alt+S").toString();
@@ -59,6 +61,7 @@ struct StockConfig
         settings.setValue("RefreshInterval", refreshInterval);
         settings.setValue("Rect", lastGeometry);
         settings.setValue("RowHeight", rowHeight);
+        settings.setValue("AutoHideSeconds", autoHideDelay);
         settings.endGroup();
 
         settings.setValue("Hotkey/Global", hotkey);

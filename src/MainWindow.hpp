@@ -56,8 +56,6 @@ public:
               createTitleBarButton(":/%1/settings.svg", "Settings", &MainWindow::openSettings),
           })
         , table_(new StockTableView(config_, this))
-        , refreshTimer_(new QTimer(this))
-        , searchDelayTimer_(new QTimer(this))
         , labels_({
               { "SH000001", { "沪", new QLabel(this) } },
               { "SZ399001", { "深", new QLabel(this) } },
@@ -70,10 +68,6 @@ public:
         applyApiSource();
 
         setAttribute(Qt::WA_DeleteOnClose, false);
-        refreshTimer_->setSingleShot(true);
-        searchDelayTimer_->setSingleShot(true);
-
-        connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
 
         connect(input_, &QLineEdit::textChanged, this, [this](auto &&text) {
             if (text.isEmpty())
@@ -81,17 +75,16 @@ public:
                 searchResultWidget_->hide();
                 return;
             }
-            searchDelayTimer_->start(500);
-        });
-        connect(searchDelayTimer_, &QTimer::timeout, this, [this] {
-            input_->setFocus();
-            auto text = input_->text().trimmed();
-            if (text.isEmpty())
-            {
-                searchResultWidget_->hide();
-                return;
-            }
-            api_->searchStocksAsync(text);
+            QTimer::singleShot(500, [this] {
+                input_->setFocus();
+                auto text = input_->text().trimmed();
+                if (text.isEmpty())
+                {
+                    searchResultWidget_->hide();
+                    return;
+                }
+                api_->searchStocksAsync(text);
+            });
         });
         connect(searchResultWidget_, &StockSearchResultTable::stockSelected, this, [this](auto &&code) {
             searchResultWidget_->hide();
@@ -99,6 +92,18 @@ public:
             input_->setFocus();
             table_->addStock(code);
             startRefresh();
+        });
+        connect(qApp, &QApplication::focusChanged, this, [this](auto prev, auto curr) {
+            if (config_->autoHideDelay <= 0) return;
+            while (curr != nullptr)
+            {
+                if (curr == this)
+                {
+                    return;
+                }
+                curr = curr->parentWidget();
+            }
+            QTimer::singleShot(config_->autoHideDelay, this, &QWidget::hide);
         });
 
         installEventFilter(this);
@@ -129,6 +134,15 @@ public:
             activateWindow();
             show();
         }
+
+        // if (isVisible())
+        //     hide();
+        // else
+        // {
+        //     show();
+        //     activateWindow();
+        //     setFocus();
+        // }
     };
 
 protected:
@@ -182,34 +196,37 @@ protected:
                 }
             }
         }
-        else if (watched == this && etype == QEvent::Wheel && ((QWheelEvent *)event)->modifiers() & Qt::AltModifier)
+        else if (watched == this)
         {
-            auto changeOpacity = [this, currentOpacity = windowOpacity()](int angle) {
-                qreal newOpacity = qBound(0.2, currentOpacity + (angle > 0 ? +0.05 : -0.05), 1.0);
-                if (qAbs(newOpacity - currentOpacity) > 0.001)
+            if (etype == QEvent::Wheel && ((QWheelEvent *)event)->modifiers() & Qt::AltModifier)
+            {
+                auto changeOpacity = [this, currentOpacity = windowOpacity()](int angle) {
+                    qreal newOpacity = qBound(0.2, currentOpacity + (angle > 0 ? +0.05 : -0.05), 1.0);
+                    if (qAbs(newOpacity - currentOpacity) > 0.001)
+                    {
+                        setWindowOpacity(newOpacity);
+                        config_->windowOpacity = newOpacity;
+                    }
+                };
+                auto we = (QWheelEvent *)event;
+                if (QPoint numPixels = we->pixelDelta(); !numPixels.isNull())
                 {
-                    setWindowOpacity(newOpacity);
-                    config_->windowOpacity = newOpacity;
+                    changeOpacity(numPixels.x());
                 }
-            };
-            auto we = (QWheelEvent *)event;
-            if (QPoint numPixels = we->pixelDelta(); !numPixels.isNull())
-            {
-                changeOpacity(numPixels.x());
+                else if (QPoint numDegrees = we->angleDelta() / 8; !numDegrees.isNull())
+                {
+                    changeOpacity(numDegrees.x());
+                }
             }
-            else if (QPoint numDegrees = we->angleDelta() / 8; !numDegrees.isNull())
+            else if (etype == QEvent::Resize || etype == QEvent::Show)
             {
-                changeOpacity(numDegrees.x());
+                searchResultWidget_->setGeometry(table_->geometry());
             }
-        }
-        else if (watched == this && (etype == QEvent::Resize || etype == QEvent::Show))
-        {
-            searchResultWidget_->setGeometry(table_->geometry());
-        }
-        else if (watched == this && (etype == QEvent::Close))
-        {
-            hide();
-            return true;
+            else if (etype == QEvent::Close)
+            {
+                hide();
+                return true;
+            }
         }
         else if (watched == titleBar_)
         {
@@ -235,7 +252,10 @@ private:
     void startRefresh()
     {
         api_->getStockInfosAsync(config_->stockCodes + labels_.keys());
-        refreshTimer_->start(config_->refreshInterval);
+        if (config_->refreshInterval >= 100)
+        {
+            QTimer::singleShot(config_->refreshInterval, this, &MainWindow::startRefresh);
+        }
     }
 
     void handleStockInfosReceived(const QList<StockInfo> &stockInfos)
@@ -455,9 +475,6 @@ private:
     StockTableView *table_;
 
     QPoint mousePressedPosition_;
-
-    QTimer *refreshTimer_;
-    QTimer *searchDelayTimer_;
 
     QMap<QString, QPair<QString, QLabel *>> labels_;
 };

@@ -34,6 +34,14 @@ public:
         refreshIntervalSpin->setValue(config->refreshInterval);
         form->addRow("刷新间隔:", refreshIntervalSpin);
 
+        auto autoHideDelayBox = new QComboBox(this);
+        autoHideDelayBox->addItem("禁用", 0);
+        autoHideDelayBox->addItem("2秒", 2000);
+        autoHideDelayBox->addItem("5秒", 5000);
+        autoHideDelayBox->addItem("10秒", 10000);
+        autoHideDelayBox->setCurrentText(QString("%1秒").arg(config->autoHideDelay / 1000));
+        form->addRow("自动隐藏:", autoHideDelayBox);
+
         auto themeCombo = new QComboBox(this);
         themeCombo->addItem("浅色", "light");
         themeCombo->addItem("深色", "dark");
@@ -62,6 +70,7 @@ public:
             config->theme = themeCombo->currentData().toString();
             config->windowOpacity = opacitySpin->value();
             config->rowHeight = rowHeightSpin->value();
+            config->autoHideDelay = autoHideDelayBox->currentData().toInt();
             this->accept();
         });
         connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
