@@ -56,6 +56,8 @@ public:
               createTitleBarButton(":/%1/settings.svg", "Settings", &MainWindow::openSettings),
           })
         , table_(new StockTableView(config_, this))
+        , autoHideTimer_(new QTimer(this))
+        , refreshTimer_(new QTimer(this))
         , labels_({
               { "SH000001", { "沪", new QLabel(this) } },
               { "SZ399001", { "深", new QLabel(this) } },
@@ -93,17 +95,23 @@ public:
             table_->addStock(code);
             startRefresh();
         });
+
+        refreshTimer_->setSingleShot(true);
+        connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
+        autoHideTimer_->setSingleShot(true);
+        connect(autoHideTimer_, &QTimer::timeout, this, &QWidget::hide);
         connect(qApp, &QApplication::focusChanged, this, [this](auto prev, auto curr) {
             if (config_->autoHideDelay <= 0) return;
             while (curr != nullptr)
             {
                 if (curr == this)
                 {
+                    autoHideTimer_->stop();
                     return;
                 }
                 curr = curr->parentWidget();
             }
-            QTimer::singleShot(config_->autoHideDelay, this, &QWidget::hide);
+            autoHideTimer_->start(config_->autoHideDelay);
         });
 
         installEventFilter(this);
@@ -230,19 +238,20 @@ protected:
         }
         else if (watched == titleBar_)
         {
+            static QPoint mousePressedPosition;
             auto me = dynamic_cast<QMouseEvent *>(event);
             if (etype == QEvent::MouseButtonPress && me->button() == Qt::LeftButton)
             {
-                mousePressedPosition_ = me->globalPos() - geometry().topLeft();
+                mousePressedPosition = me->globalPos() - geometry().topLeft();
                 return true;
             }
-            else if (etype == QEvent::MouseMove && !mousePressedPosition_.isNull() && me->buttons() & Qt::LeftButton)
+            else if (etype == QEvent::MouseMove && !mousePressedPosition.isNull() && me->buttons() & Qt::LeftButton)
             {
-                move(me->globalPos() - mousePressedPosition_);
+                move(me->globalPos() - mousePressedPosition);
                 return true;
             }
             else if (etype == QEvent::MouseButtonRelease && me->button() != Qt::LeftButton)
-                mousePressedPosition_ = {};
+                mousePressedPosition = {};
             return true;
         }
         return QWidget::eventFilter(watched, event);
@@ -254,7 +263,7 @@ private:
         api_->getStockInfosAsync(config_->stockCodes + labels_.keys());
         if (config_->refreshInterval >= 100)
         {
-            QTimer::singleShot(config_->refreshInterval, this, &MainWindow::startRefresh);
+            refreshTimer_->start(config_->refreshInterval);
         }
     }
 
@@ -473,8 +482,8 @@ private:
     StockSearchResultTable *searchResultWidget_;
     QList<QPushButton *> btns_;
     StockTableView *table_;
-
-    QPoint mousePressedPosition_;
+    QTimer *autoHideTimer_;
+    QTimer *refreshTimer_;
 
     QMap<QString, QPair<QString, QLabel *>> labels_;
 };
