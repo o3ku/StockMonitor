@@ -58,6 +58,7 @@ public:
         , table_(new StockTableView(config_, this))
         , autoHideTimer_(new QTimer(this))
         , refreshTimer_(new QTimer(this))
+        , searchDelayTimer_(new QTimer(this))
         , labels_({
               { "SH000001", { "沪", new QLabel(this) } },
               { "SZ399001", { "深", new QLabel(this) } },
@@ -71,22 +72,24 @@ public:
 
         setAttribute(Qt::WA_DeleteOnClose, false);
 
+        searchDelayTimer_->setSingleShot(true);
+        connect(searchDelayTimer_, &QTimer::timeout, [this] {
+            input_->setFocus();
+            auto text = input_->text().trimmed();
+            if (text.isEmpty())
+            {
+                searchResultWidget_->hide();
+                return;
+            }
+            api_->searchStocksAsync(text);
+        });
         connect(input_, &QLineEdit::textChanged, this, [this](auto &&text) {
             if (text.isEmpty())
             {
                 searchResultWidget_->hide();
                 return;
             }
-            QTimer::singleShot(500, [this] {
-                input_->setFocus();
-                auto text = input_->text().trimmed();
-                if (text.isEmpty())
-                {
-                    searchResultWidget_->hide();
-                    return;
-                }
-                api_->searchStocksAsync(text);
-            });
+            searchDelayTimer_->start(500);
         });
         connect(searchResultWidget_, &StockSearchResultTable::stockSelected, this, [this](auto &&code) {
             searchResultWidget_->hide();
@@ -119,7 +122,7 @@ public:
         input_->installEventFilter(this);
         searchResultWidget_->installEventFilter(this);
 
-        if (!config->lastGeometry.isEmpty()) restoreGeometry(config->lastGeometry);
+        if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
     }
 
     ~MainWindow()
@@ -226,9 +229,14 @@ protected:
                     changeOpacity(numDegrees.x());
                 }
             }
-            else if (etype == QEvent::Resize || etype == QEvent::Show)
+            else if (etype == QEvent::Resize)
             {
                 searchResultWidget_->setGeometry(table_->geometry());
+            }
+            else if (etype == QEvent::Show)
+            {
+                searchResultWidget_->setGeometry(table_->geometry());
+                if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
             }
             else if (etype == QEvent::Close)
             {
@@ -484,6 +492,7 @@ private:
     StockTableView *table_;
     QTimer *autoHideTimer_;
     QTimer *refreshTimer_;
+    QTimer *searchDelayTimer_;
 
     QMap<QString, QPair<QString, QLabel *>> labels_;
 };

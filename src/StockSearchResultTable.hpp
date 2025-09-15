@@ -86,8 +86,19 @@ public:
         model_->setColumnCount(2);
         for (auto &&it : results)
         {
-            if (config_->stockCodes.contains(it.code())) continue;
-            model_->appendRow({ new QStandardItem(it.code()), new QStandardItem(it.name()) });
+            auto items = { new QStandardItem(it.code()), new QStandardItem(it.name()) };
+            if (config_->stockCodes.contains(it.code()))
+            {
+                // for (auto item : items)
+                // {
+                // item->setForeground(Qt::gray);
+                // QFont ft = item->font();
+                // ft.setItalic(true);
+                // item->setFont(ft);
+                // }
+                continue;
+            }
+            model_->appendRow(items);
         }
         show();
     }
