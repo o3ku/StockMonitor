@@ -121,13 +121,10 @@ public:
         titleBar_->installEventFilter(this);
         input_->installEventFilter(this);
         searchResultWidget_->installEventFilter(this);
-
-        if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
     }
 
     ~MainWindow()
     {
-        config_->lastGeometry = saveGeometry();
     }
 
 public:
@@ -135,12 +132,10 @@ public:
     {
         if (isActiveWindow())
         {
-            config_->lastGeometry = saveGeometry();
             hide();
         }
         else
         {
-            if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
             input_->setFocus();
             activateWindow();
             show();
@@ -238,8 +233,9 @@ protected:
                 searchResultWidget_->setGeometry(table_->geometry());
                 if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
             }
-            else if (etype == QEvent::Close)
+            else if (etype == QEvent::Close || etype == QEvent::Hide)
             {
+                config_->lastGeometry = saveGeometry();
                 hide();
                 return true;
             }
