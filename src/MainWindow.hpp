@@ -157,6 +157,7 @@ protected:
         auto etype = event->type();
         if (etype == QEvent::KeyPress)
         {
+            autoHideTimer_->stop();
             auto ke = static_cast<QKeyEvent *>(event);
             auto key = ke->key();
             if (watched == input_ || watched == searchResultWidget_ || watched == this || watched == table_)
@@ -258,6 +259,11 @@ protected:
                 mousePressedPosition = {};
             return true;
         }
+        else if (QList<QEvent::Type>{ QEvent::KeyRelease, QEvent::MouseMove, QEvent::MouseButtonPress, QEvent::MouseButtonRelease, QEvent::Wheel }.contains(
+                     etype))
+        {
+            if (config_->autoHideDelay > 0) autoHideTimer_->start(config_->autoHideDelay);
+        }
         return QWidget::eventFilter(watched, event);
     }
 
@@ -304,9 +310,8 @@ private:
     void onCloseButtonClicked()
     {
         // Check if Alt key is pressed
-        if (QApplication::keyboardModifiers() & Qt::AltModifier)
+        if (QApplication::keyboardModifiers() & Qt::ControlModifier)
         {
-            // Alt+Click: Exit application directly
             QApplication::quit();
         }
         else

@@ -9,7 +9,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-find_package(Qt5 REQUIRED COMPONENTS Core Widgets Network)
+find_package(Qt5 REQUIRED COMPONENTS Core Widgets Network Svg)
 find_package(OpenSSL REQUIRED)
 
 set(QHOTKEY_INSTALL OFF)
@@ -24,7 +24,7 @@ if(WIN32)
 else()
     add_executable(${PROJECT_NAME} ${SOURCES} res/main.qrc)
 endif()
-target_link_libraries(${PROJECT_NAME} Qt::Core Qt::Widgets Qt::Network OpenSSL::SSL OpenSSL::Crypto qhotkey)
+target_link_libraries(${PROJECT_NAME} Qt::Core Qt::Widgets Qt::Network Qt::Svg OpenSSL::SSL OpenSSL::Crypto qhotkey)
 
 if(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)

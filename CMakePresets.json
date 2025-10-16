@@ -29,10 +29,7 @@
                 "CMAKE_C_COMPILER": "cl",
                 "CMAKE_CXX_COMPILER": "cl",
                 "CMAKE_TOOLCHAIN_FILE": "D:/Local/vcpkg-latest/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDebug",
-                "CMAKE_CXX_FLAGS_DEBUG": "/MTd",
-                "CMAKE_C_FLAGS_DEBUG": "/MTd"
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
             }
         },
         {
@@ -44,10 +41,7 @@
                 "CMAKE_C_COMPILER": "cl",
                 "CMAKE_CXX_COMPILER": "cl",
                 "CMAKE_TOOLCHAIN_FILE": "D:/Local/vcpkg-latest/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-                "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
-                "CMAKE_CXX_FLAGS_DEBUG": "/MT",
-                "CMAKE_C_FLAGS_DEBUG": "/MT"
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static-md"
             }
         }
     ],
