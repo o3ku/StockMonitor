@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QAction>
 #include <QApplication>
@@ -7,6 +7,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QCursor>
 #include <QFile>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -48,6 +49,7 @@ public:
     explicit MainWindow(const std::shared_ptr<StockConfig> &config, QWidget *parent = nullptr)
         : QFrame(parent)
         , config_(config)
+        , apiService_(StockApiService::instance())
         , titleBar_(new QWidget(this))
         , input_(new QLineEdit(this))
         , searchResultWidget_(new StockSearchResultTable(config_, this))
@@ -68,6 +70,9 @@ public:
         setupUi();
         setupSystemTray();
         applyTheme();
+        connect(&apiService_, &StockApiService::errorOccurred, this, &MainWindow::onApiError);
+        connect(&apiService_, &StockApiService::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
+        connect(&apiService_, &StockApiService::searchCompleted, searchResultWidget_, &StockSearchResultTable::showResults);
         applyApiSource();
 
         setAttribute(Qt::WA_DeleteOnClose, false);
@@ -81,7 +86,7 @@ public:
                 searchResultWidget_->hide();
                 return;
             }
-            api_->searchStocksAsync(text);
+            apiService_.searchStocksAsync(text);
         });
         connect(input_, &QLineEdit::textChanged, this, [this](auto &&text) {
             if (text.isEmpty())
@@ -102,7 +107,7 @@ public:
         refreshTimer_->setSingleShot(true);
         connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
         autoHideTimer_->setSingleShot(true);
-        connect(autoHideTimer_, &QTimer::timeout, this, &QWidget::hide);
+        connect(autoHideTimer_, &QTimer::timeout, this, &MainWindow::onAutoHideTimeout);
         connect(qApp, &QApplication::focusChanged, this, [this](auto prev, auto curr) {
             if (config_->autoHideDelay <= 0) return;
             while (curr != nullptr)
@@ -120,6 +125,7 @@ public:
         installEventFilter(this);
         titleBar_->installEventFilter(this);
         input_->installEventFilter(this);
+        table_->installEventFilter(this);
         searchResultWidget_->installEventFilter(this);
     }
 
@@ -155,11 +161,29 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override
     {
         auto etype = event->type();
+        if (QList<QEvent::Type>{ QEvent::KeyRelease, QEvent::MouseMove, QEvent::MouseButtonPress, QEvent::MouseButtonRelease, QEvent::Wheel }.contains(etype))
+        {
+            if (config_->autoHideDelay > 0) autoHideTimer_->start(config_->autoHideDelay);
+        }
         if (etype == QEvent::KeyPress)
         {
             autoHideTimer_->stop();
             auto ke = static_cast<QKeyEvent *>(event);
             auto key = ke->key();
+            if ((ke->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) == Qt::NoModifier)
+            {
+                const QString text = ke->text();
+                if (!text.isEmpty())
+                {
+                    const QChar ch = text.at(0);
+                    if (ch.isLetterOrNumber() && ch.unicode() < 128 && !input_->hasFocus())
+                    {
+                        input_->setFocus();
+                        input_->insert(text);
+                        return true;
+                    }
+                }
+            }
             if (watched == input_ || watched == searchResultWidget_ || watched == this || watched == table_)
             {
                 switch (key)
@@ -233,6 +257,8 @@ protected:
             {
                 searchResultWidget_->setGeometry(table_->geometry());
                 if (!config_->lastGeometry.isEmpty()) restoreGeometry(config_->lastGeometry);
+                cursorInside_ = rect().contains(mapFromGlobal(QCursor::pos()));
+                if (cursorInside_) autoHideTimer_->stop();
             }
             else if (etype == QEvent::Close || etype == QEvent::Hide)
             {
@@ -259,18 +285,38 @@ protected:
                 mousePressedPosition = {};
             return true;
         }
-        else if (QList<QEvent::Type>{ QEvent::KeyRelease, QEvent::MouseMove, QEvent::MouseButtonPress, QEvent::MouseButtonRelease, QEvent::Wheel }.contains(
-                     etype))
-        {
-            if (config_->autoHideDelay > 0) autoHideTimer_->start(config_->autoHideDelay);
-        }
         return QWidget::eventFilter(watched, event);
     }
 
+    void enterEvent(QEvent *event) override
+    {
+        cursorInside_ = true;
+        autoHideTimer_->stop();
+        QFrame::enterEvent(event);
+    }
+
+    void leaveEvent(QEvent *event) override
+    {
+        cursorInside_ = false;
+        if (config_->autoHideDelay > 0) autoHideTimer_->start(config_->autoHideDelay);
+        QFrame::leaveEvent(event);
+    }
+
 private:
+    void onAutoHideTimeout()
+    {
+        if (config_->autoHideDelay <= 0) return;
+        if (cursorInside_)
+        {
+            autoHideTimer_->start(config_->autoHideDelay);
+            return;
+        }
+        hide();
+    }
+
     void startRefresh()
     {
-        api_->getStockInfosAsync(config_->stockCodes + labels_.keys());
+        apiService_.getStockInfosAsync(config_->stockCodes + labels_.keys());
         if (config_->refreshInterval >= 100)
         {
             refreshTimer_->start(config_->refreshInterval);
@@ -310,7 +356,7 @@ private:
     void onCloseButtonClicked()
     {
         // Check if Alt key is pressed
-        if (QApplication::keyboardModifiers() & Qt::ControlModifier)
+        if (QApplication::keyboardModifiers() & Qt::AltModifier)
         {
             QApplication::quit();
         }
@@ -462,14 +508,14 @@ private:
 
     void applyApiSource()
     {
-        api_ = StockApiService::instance().get(config_->apiSource);
-        Logger::info(QString("Use %1 API").arg(api_->name()));
-        config_->apiSource = api_->name();
-
-        connect(api_, &IStockApiProvider::errorOccurred, this, [] {
-        });
-        connect(api_, &IStockApiProvider::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
-        connect(api_, &IStockApiProvider::searchCompleted, searchResultWidget_, &StockSearchResultTable::showResults);
+        QString requested = config_->apiSource;
+        bool exactMatch = apiService_.setActiveProvider(requested);
+        config_->apiSource = apiService_.activeProviderName();
+        Logger::info(QString("Use %1 API").arg(config_->apiSource));
+        if (!exactMatch)
+        {
+            Logger::error(QString("API source '%1' not found, fallback to %2").arg(requested, config_->apiSource));
+        }
         startRefresh();
     }
 
@@ -484,7 +530,7 @@ private:
 
 private:
     std::shared_ptr<StockConfig> config_;
-    IStockApiProvider *api_{ nullptr };
+    StockApiService &apiService_;
 
     QWidget *titleBar_;
     QLineEdit *input_;
@@ -494,6 +540,7 @@ private:
     QTimer *autoHideTimer_;
     QTimer *refreshTimer_;
     QTimer *searchDelayTimer_;
+    bool cursorInside_{ false };
 
     QMap<QString, QPair<QString, QLabel *>> labels_;
 };

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../StockInfo.hpp"
 #include "IStockApiProvider.hpp"
@@ -53,6 +53,12 @@ private slots:
     void onSearchRequestSucceeded()
     {
         QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+        if (!reply) return;
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            emit errorOccurred(QString("Search failed: %1").arg(reply->errorString()));
+            return;
+        }
         const QByteArray &responseData = reply->readAll();
         // 使用GBK编码解析响应数据
         QTextCodec *codec = QTextCodec::codecForName("GBK");
@@ -76,7 +82,7 @@ private slots:
 
                 if (fields.size() >= 3)
                 {
-                    QString market = fields[0];  // sz, sh 等
+                    QString market = fields[0];  // sz, sh, us, hk...
                     QString code = fields[1];    // 股票代码
                     QString name = fields[2];    // 股票名称
 
@@ -84,28 +90,36 @@ private slots:
                     {
                         // 解码Unicode转义序列
                         name = decodeUnicodeEscapes(name);
-                        
-                        // 标准化市场代码
-                        QString marketPrefix;
-                        if (market.toLower() == "sh")
+
+                        QString standardCode;
+                        if (market.toLower() == "us")
                         {
-                            marketPrefix = "SH";
-                        }
-                        else if (market.toLower() == "sz")
-                        {
-                            marketPrefix = "SZ";
-                        }
-                        else if (market.toLower() == "hk")
-                        {
-                            marketPrefix = "HK";
+                            standardCode = normalizeUsSymbol(code);
                         }
                         else
                         {
-                            marketPrefix = market.toUpper();
-                        }
+                            // 标准化市场代码
+                            QString marketPrefix;
+                            if (market.toLower() == "sh")
+                            {
+                                marketPrefix = "SH";
+                            }
+                            else if (market.toLower() == "sz")
+                            {
+                                marketPrefix = "SZ";
+                            }
+                            else if (market.toLower() == "hk")
+                            {
+                                marketPrefix = "HK";
+                            }
+                            else
+                            {
+                                marketPrefix = market.toUpper();
+                            }
 
-                        // 构建标准化的股票代码
-                        QString standardCode = marketPrefix + code;
+                            // 构建标准化的股票代码
+                            standardCode = marketPrefix + code;
+                        }
                         StockInfo result(standardCode, name);
                         results.append(result);
                     }
@@ -119,6 +133,12 @@ private slots:
     void onStockInfoRequestSucceeded()
     {
         QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+        if (!reply) return;
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            emit errorOccurred(QString("Stock info failed: %1").arg(reply->errorString()));
+            return;
+        }
         const QByteArray &responseData = reply->readAll();
         // 使用GBK编码解析响应数据
         QTextCodec *codec = QTextCodec::codecForName("GBK");
@@ -166,6 +186,14 @@ private:
         {
             return upperCode.toLower();
         }
+        if (upperCode.startsWith("HK"))
+        {
+            return QString("hk%1").arg(upperCode.mid(2));
+        }
+        if (isUsSymbol(upperCode))
+        {
+            return QString("us%1").arg(normalizeUsSymbol(upperCode));
+        }
 
         if (upperCode.length() == 6)
         {
@@ -209,8 +237,8 @@ private:
 
     QString extractStockCodeFromLine(const QString &line)
     {
-        // 从 "v_sh000001=" 这样的格式中提取股票代码
-        QRegularExpression pattern("v_([a-z]{2}\\d{6})=");
+        // 从 "v_sh000001=" 或 "v_usAAPL=" 这样的格式中提取股票代码
+        QRegularExpression pattern("v_([a-z]{2}[A-Za-z0-9\\.]{1,8})=");
         QRegularExpressionMatch match = pattern.match(line);
 
         if (match.hasMatch())
@@ -224,6 +252,14 @@ private:
             else if (formattedCode.startsWith("sz"))
             {
                 return "SZ" + formattedCode.mid(2);
+            }
+            else if (formattedCode.startsWith("hk"))
+            {
+                return "HK" + formattedCode.mid(2);
+            }
+            else if (formattedCode.startsWith("us"))
+            {
+                return normalizeUsSymbol(formattedCode.mid(2));
             }
         }
 
@@ -336,5 +372,30 @@ private:
         }
 
         return stockInfo;
+    }
+
+    bool isUsSymbol(const QString &upperCode) const
+    {
+        if (upperCode.startsWith("US")) return true;
+        for (const QChar ch : upperCode)
+        {
+            if (ch.isLetter()) return true;
+        }
+        return false;
+    }
+
+    QString normalizeUsSymbol(const QString &upperCode) const
+    {
+        QString symbol = upperCode;
+        if (symbol.startsWith("US"))
+        {
+            symbol = symbol.mid(2);
+        }
+        int dot = symbol.indexOf('.');
+        if (dot >= 0)
+        {
+            symbol = symbol.left(dot);
+        }
+        return symbol.toUpper();
     }
 };

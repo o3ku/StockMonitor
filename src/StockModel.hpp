@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Logger.hpp"
 #include "StockInfo.hpp"
@@ -213,11 +213,17 @@ public:
 
     void updateStocksDetail(const QList<StockInfo> &arr)
     {
+        bool updated = false;
         for (auto &&it : arr)
         {
             if (!config_->stockCodes.contains(it.code())) continue;
             stocks_[it.code()] = it;
-            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1), { Qt::DisplayRole, Qt::ForegroundRole });
+            updated = true;
+        }
+        if (updated && rowCount() > 0 && columnCount() > 0)
+        {
+            emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
+                { Qt::DisplayRole, Qt::ForegroundRole, Qt::ToolTipRole });
         }
     }
     

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -55,12 +55,22 @@ public:
 
     void getStockInfosAsync(const QStringList &codes) override
     {
-        QSet<QString> formattedCodes;
+        QStringList formattedCodes;
         for (const QString &code : codes)
         {
-            QString formattedCode = formatStockCode(code);
-            formattedCodes.insert(formattedCode);
+            if (isUsSymbol(code))
+            {
+                QString symbol = normalizeUsSymbol(code);
+                formattedCodes.append(QString("105.%1").arg(symbol));
+                formattedCodes.append(QString("106.%1").arg(symbol));
+            }
+            else
+            {
+                QString formattedCode = formatStockCode(code);
+                formattedCodes.append(formattedCode);
+            }
         }
+        formattedCodes.removeDuplicates();
 
         // 东方财富API字段说明：
         // f1:市场代码 f2:最新价 f3:涨跌幅 f4:涨跌额 f5:成交量 f6:成交额
@@ -70,7 +80,7 @@ public:
         QString url = QString(
             "http://push2.eastmoney.com/api/qt/ulist.np/"
             "get?fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23,f24,f25,f33,f62,f128,f136,f115,f152&secids=%1")
-                          .arg(formattedCodes.toList().join(","));
+                          .arg(formattedCodes.join(","));
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
@@ -79,7 +89,7 @@ public:
 
         QNetworkReply *reply = netmgr_->get(request);
         reply->setProperty("stockCodes", codes);
-        reply->setProperty("formattedCodes", QVariant::fromValue(formattedCodes.toList()));
+        reply->setProperty("formattedCodes", formattedCodes);
         connect(reply, &QNetworkReply::finished, this, &EastMoneyStockApiProvider::onStockInfosFinished);
     }
 
@@ -153,6 +163,10 @@ private:
                 return QString("1.%1").arg(upperCode.mid(2));
             }
         }
+        if (upperCode.startsWith("HK"))
+        {
+            return QString("116.%1").arg(upperCode.mid(2));
+        }
 
         if (upperCode.length() == 6)
         {
@@ -204,11 +218,32 @@ private:
                         QString code = stockObj["Code"].toString();
                         QString name = stockObj["Name"].toString();
                         
-                        // 使用MktNum确定市场，1是上海，其他是深圳
-                        QString market = stockObj["MktNum"].toString() == "1" ? "SH" : "SZ";
+                        // Use MktNum to determine market (1=SH, 0=SZ, 116=HK, 105/106=US).
+                        QString marketPrefix;
+                        QString marketNum = stockObj["MktNum"].toString();
+                        if (marketNum == "1")
+                        {
+                            marketPrefix = "SH";
+                        }
+                        else if (marketNum == "0")
+                        {
+                            marketPrefix = "SZ";
+                        }
+                        else if (marketNum == "116")
+                        {
+                            marketPrefix = "HK";
+                        }
+                        else if (marketNum == "105" || marketNum == "106")
+                        {
+                            marketPrefix = QString();
+                        }
+                        else
+                        {
+                            continue;
+                        }
                         
-                        // 构建标准格式的代码
-                        QString standardCode = market + code;
+                        // Build standard code.
+                        QString standardCode = marketPrefix.isEmpty() ? code.toUpper() : marketPrefix + code;
 
                         if (!code.isEmpty())
                         {
@@ -284,31 +319,60 @@ private:
         return stockInfos;
     }
 
+    bool isUsSymbol(const QString &code) const
+    {
+        if (code.startsWith("US", Qt::CaseInsensitive)) return true;
+        if (code.startsWith("SH", Qt::CaseInsensitive) || code.startsWith("SZ", Qt::CaseInsensitive) || code.startsWith("HK", Qt::CaseInsensitive))
+        {
+            return false;
+        }
+        for (const QChar ch : code)
+        {
+            if (ch.isLetter()) return true;
+        }
+        return false;
+    }
+
+    QString normalizeUsSymbol(const QString &code) const
+    {
+        QString symbol = code.toUpper();
+        if (symbol.startsWith("US"))
+        {
+            symbol = symbol.mid(2);
+        }
+        return symbol;
+    }
+
     StockInfo parseEasyMoneyStockData(const QString &code, const QJsonObject &stockObj)
     {
         StockInfo stockInfo;
 
         stockInfo.setCode(code);
         stockInfo.setName(stockObj["f14"].toString());
-        
-        // 东方财富的价格数据需要除以100（价格单位为分）
+
+        int marketId = stockObj["f13"].toInt();
+        double priceDivisor = 100.0;
+        if (marketId == 116 || marketId == 105 || marketId == 106)
+        {
+            priceDivisor = 1000.0;
+        }
+
         double currentPrice = stockObj["f2"].toDouble();
-        if (currentPrice > 0) {
-            currentPrice = currentPrice / 100.0;
+        if (currentPrice > 0)
+        {
+            currentPrice = currentPrice / priceDivisor;
         }
         stockInfo.setCurrentPrice(currentPrice);
-        
-        // 涨跌额和涨跌幅
-        double change = stockObj["f4"].toDouble() / 100.0;        // 涨跌额需要除以100
-        double changePercent = stockObj["f3"].toDouble() / 100.0; // 涨跌幅需要除以100
+
+        double change = stockObj["f4"].toDouble() / priceDivisor;
+        double changePercent = stockObj["f3"].toDouble() / 100.0;
         stockInfo.setChange(change);
         stockInfo.setChangePercent(changePercent);
-        
-        // 其他价格数据也需要除以100
-        stockInfo.setHigh(stockObj["f15"].toDouble() / 100.0);
-        stockInfo.setLow(stockObj["f16"].toDouble() / 100.0);
-        stockInfo.setOpenPrice(stockObj["f17"].toDouble() / 100.0);
-        stockInfo.setYesterday(stockObj["f18"].toDouble() / 100.0);
+
+        stockInfo.setHigh(stockObj["f15"].toDouble() / priceDivisor);
+        stockInfo.setLow(stockObj["f16"].toDouble() / priceDivisor);
+        stockInfo.setOpenPrice(stockObj["f17"].toDouble() / priceDivisor);
+        stockInfo.setYesterday(stockObj["f18"].toDouble() / priceDivisor);
         
         // 成交量和成交额
         stockInfo.setVolume(stockObj["f5"].toVariant().toLongLong());
@@ -316,11 +380,11 @@ private:
         
         // 买卖盘数据
         if (stockObj.contains("f19")) {
-            stockInfo.setBid1(stockObj["f19"].toDouble() / 100.0);
+            stockInfo.setBid1(stockObj["f19"].toDouble() / priceDivisor);
         }
         
         if (stockObj.contains("f20")) {
-            stockInfo.setAsk1(stockObj["f20"].toDouble() / 100.0);
+            stockInfo.setAsk1(stockObj["f20"].toDouble() / priceDivisor);
         }
         
         // 买卖盘量（单位：股，需要乘以100转换为股）

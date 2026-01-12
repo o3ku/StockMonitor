@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <QDateTime>
 #include <QNetworkAccessManager>
@@ -87,15 +87,19 @@ private slots:
         QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
         if (!reply) return;
 
+        if (reply->error() != QNetworkReply::NoError)
+        {
+            emit errorOccurred(QString("Stock info failed: %1").arg(reply->errorString()));
+            reply->deleteLater();
+            return;
+        }
+
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
 
-        if (reply->error() == QNetworkReply::NoError)
-        {
-            QString response = QString::fromLocal8Bit(reply->readAll());
-            QList<StockInfo> stockInfos = parseSinaBatchStockData(stockCodes, formattedCodes, response);
-            emit stockInfosReceived(stockInfos);
-        }
+        QString response = QString::fromLocal8Bit(reply->readAll());
+        QList<StockInfo> stockInfos = parseSinaBatchStockData(stockCodes, formattedCodes, response);
+        emit stockInfosReceived(stockInfos);
 
         reply->deleteLater();
     }
@@ -107,6 +111,18 @@ private:
         if (upperCode.startsWith("SZ") || upperCode.startsWith("SH"))
         {
             return upperCode.toLower();
+        }
+        if (upperCode.startsWith("HK"))
+        {
+            return QString("hk%1").arg(upperCode.mid(2));
+        }
+        if (upperCode.startsWith("US"))
+        {
+            return QString("gb_%1").arg(upperCode.mid(2).toLower());
+        }
+        if (isUsSymbol(upperCode))
+        {
+            return QString("gb_%1").arg(upperCode.toLower());
         }
 
         if (upperCode.length() == 6)
@@ -141,7 +157,7 @@ private:
                 QStringList fields = entry.split(',');
                 if (fields.size() >= 8)
                 {
-                    QString code = fields[3];
+                    QString code = normalizeSinaCode(fields[3]);
                     QString name = fields[4];
                     QString market = fields[1];
                     QString type = fields[0];
@@ -156,6 +172,33 @@ private:
         }
 
         return results;
+    }
+
+    bool isUsSymbol(const QString &upperCode) const
+    {
+        for (const QChar ch : upperCode)
+        {
+            if (ch.isLetter()) return true;
+        }
+        return false;
+    }
+
+    QString normalizeSinaCode(const QString &rawCode) const
+    {
+        QString code = rawCode.trimmed();
+        if (code.startsWith("hk", Qt::CaseInsensitive))
+        {
+            return QString("HK%1").arg(code.mid(2));
+        }
+        if (code.startsWith("us", Qt::CaseInsensitive))
+        {
+            return code.mid(2).toUpper();
+        }
+        if (code.startsWith("gb_", Qt::CaseInsensitive))
+        {
+            return code.mid(3).toUpper();
+        }
+        return code.toUpper();
     }
 
     QList<StockInfo> parseSinaBatchStockData(const QStringList &originalCodes, const QStringList &formattedCodes, const QString &response)
@@ -203,7 +246,26 @@ private:
             QString data = match.captured(1);
             QStringList fields = data.split(',');
 
-            if (fields.size() >= 32)
+            if (formatStockCode(code).startsWith("hk") && fields.size() >= 19)
+            {
+                stockInfo.setCode(code);
+                stockInfo.setName(fields[1]);
+                stockInfo.setOpenPrice(fields[2].toDouble());
+                stockInfo.setYesterday(fields[3].toDouble());
+                stockInfo.setHigh(fields[4].toDouble());
+                stockInfo.setLow(fields[5].toDouble());
+                stockInfo.setCurrentPrice(fields[6].toDouble());
+                stockInfo.setChange(fields[7].toDouble());
+                stockInfo.setChangePercent(fields[8].toDouble());
+                stockInfo.setBid1(fields[9].toDouble());
+                stockInfo.setAsk1(fields[10].toDouble());
+                stockInfo.setTurnover(fields[11].toDouble());
+                stockInfo.setVolume(fields[12].toLongLong());
+                stockInfo.setTradeDate(fields[17]);
+                stockInfo.setTradeTime(fields[18]);
+                stockInfo.setLastUpdate(QDateTime::currentDateTime());
+            }
+            else if (fields.size() >= 32)
             {
                 stockInfo.setCode(code);
                 stockInfo.setName(fields[0]);

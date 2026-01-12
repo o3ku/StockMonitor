@@ -22,7 +22,7 @@ public:
         auto apiSourceCombo = new QComboBox(this);
         apiSourceCombo->addItem("新浪财经", "sina");
         apiSourceCombo->addItem("腾讯财经", "tencent");
-        apiSourceCombo->addItem("东方财富", "easymoney");
+        apiSourceCombo->addItem("东方财富", "eastmoney");
         int apiIndex = apiSourceCombo->findData(config->apiSource);
         apiSourceCombo->setCurrentIndex(apiIndex != -1 ? apiIndex : 0);
         form->addRow("数据来源:", apiSourceCombo);
