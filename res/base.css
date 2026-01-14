@@ -1,4 +1,4 @@
-/* Base Styles - Common Layout and Sizing */
+﻿/* Base Styles - Common Layout and Sizing */
 
 * {
     font: normal 12px "Microsoft Yahei";
@@ -55,4 +55,75 @@ QTableView::item:selected:focus {
 QHeaderView::section {
     border: none;
     border-bottom: 1px solid;
+}
+
+#settingsOverlay {
+    background-color: rgba(0, 0, 0, 0.35);
+}
+
+#settingsPanel {
+    border-radius: 8px;
+}
+
+#settingsPanel QLabel {
+    padding-right: 8px;
+}
+
+#settingsPanel QComboBox,
+#settingsPanel QSpinBox,
+#settingsPanel QDoubleSpinBox {
+    padding: 4px 6px;
+    border: 1px solid;
+    border-radius: 4px;
+}
+
+#settingsPanel QComboBox:focus,
+#settingsPanel QSpinBox:focus,
+#settingsPanel QDoubleSpinBox:focus {
+    outline: none;
+}
+
+#settingsPanel QComboBox {
+    padding-right: 20px;
+}
+
+#settingsPanel QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 18px;
+    background: transparent;
+}
+
+#settingsPanel QComboBox::down-arrow {
+    width: 8px;
+    height: 8px;
+}
+
+#settingsPanel QSpinBox,
+#settingsPanel QDoubleSpinBox {
+    padding-right: 18px;
+}
+
+#settingsPanel QSpinBox::up-button,
+#settingsPanel QDoubleSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 18px;
+    background: transparent;
+}
+
+#settingsPanel QSpinBox::down-button,
+#settingsPanel QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 18px;
+    background: transparent;
+}
+
+#settingsPanel QSpinBox::up-arrow,
+#settingsPanel QSpinBox::down-arrow,
+#settingsPanel QDoubleSpinBox::up-arrow,
+#settingsPanel QDoubleSpinBox::down-arrow {
+    width: 8px;
+    height: 8px;
 }

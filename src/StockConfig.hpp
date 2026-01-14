@@ -1,10 +1,7 @@
-#pragma once
+﻿#pragma once
 
-#include "StockInfo.hpp"
 #include <QApplication>
 #include <QColor>
-#include <QDir>
-#include <QObject>
 #include <QSettings>
 #include <QString>
 #include <QStringList>

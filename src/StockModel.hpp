@@ -3,10 +3,10 @@
 #include "Logger.hpp"
 #include "StockInfo.hpp"
 #include <QAbstractTableModel>
-#include <QColor>
 #include <QDataStream>
 #include <QMap>
 #include <QMimeData>
+#include <QSet>
 #include <QStringList>
 
 // MIME type constants for drag and drop
@@ -147,9 +147,7 @@ public:
 
     QStringList mimeTypes() const override
     {
-        QStringList types;
-        types << StockConstants::STOCK_ROW_MIME_TYPE;
-        return types;
+        return { StockConstants::STOCK_ROW_MIME_TYPE };
     }
 
     QMimeData *mimeData(const QModelIndexList &indexes) const override
@@ -159,7 +157,7 @@ public:
 
         QDataStream stream(&encodedData, QIODevice::WriteOnly);
 
-        foreach (const QModelIndex &index, indexes)
+        for (const QModelIndex &index : indexes)
         {
             if (index.isValid() && index.column() == 0)  // Only process first column to avoid duplicates
             {
@@ -213,14 +211,13 @@ public:
 
     void updateStocksDetail(const QList<StockInfo> &arr)
     {
-        bool updated = false;
-        for (auto &&it : arr)
+        const QList<StockInfo> updates = filterTrackedStocks(arr);
+        if (updates.isEmpty()) return;
+        for (const StockInfo &it : updates)
         {
-            if (!config_->stockCodes.contains(it.code())) continue;
             stocks_[it.code()] = it;
-            updated = true;
         }
-        if (updated && rowCount() > 0 && columnCount() > 0)
+        if (rowCount() > 0 && columnCount() > 0)
         {
             emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
                 { Qt::DisplayRole, Qt::ForegroundRole, Qt::ToolTipRole });
@@ -286,23 +283,21 @@ public:
     }
 
 private:
-    QString formatVolume(long long volume) const
+    QList<StockInfo> filterTrackedStocks(const QList<StockInfo> &arr) const
     {
-        if (volume >= 100000000)  // 1亿
+        QSet<QString> trackedCodes = config_->stockCodes.toSet();
+        QList<StockInfo> updates;
+        updates.reserve(arr.size());
+        for (const StockInfo &it : arr)
         {
-            return QString("%1亿").arg(volume / 100000000.0, 0, 'f', 2);
+            if (trackedCodes.contains(it.code()))
+            {
+                updates.append(it);
+            }
         }
-        else if (volume >= 10000)  // 1万
-        {
-            return QString("%1万").arg(volume / 10000.0, 0, 'f', 1);
-        }
-        else
-        {
-            return QString::number(volume);
-        }
+        return updates;
     }
 
-private:
     std::shared_ptr<StockConfig> config_;
     QMap<QString, StockInfo> stocks_;
 };

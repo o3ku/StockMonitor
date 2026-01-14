@@ -159,8 +159,6 @@ private:
                 {
                     QString code = normalizeSinaCode(fields[3]);
                     QString name = fields[4];
-                    QString market = fields[1];
-                    QString type = fields[0];
 
                     if (!code.isEmpty() && !name.isEmpty())
                     {
@@ -238,7 +236,9 @@ private:
     {
         StockInfo stockInfo;
 
-        QRegularExpression pattern(QString("var hq_str_%1=\"([^\"]+)\"").arg(formatStockCode(code)));
+        const QString formattedCode = formatStockCode(code);
+        const bool isHongKong = formattedCode.startsWith("hk");
+        QRegularExpression pattern(QString("var hq_str_%1=\"([^\"]+)\"").arg(formattedCode));
         QRegularExpressionMatch match = pattern.match(response);
 
         if (match.hasMatch())
@@ -246,7 +246,7 @@ private:
             QString data = match.captured(1);
             QStringList fields = data.split(',');
 
-            if (formatStockCode(code).startsWith("hk") && fields.size() >= 19)
+            if (isHongKong && fields.size() >= 19)
             {
                 stockInfo.setCode(code);
                 stockInfo.setName(fields[1]);

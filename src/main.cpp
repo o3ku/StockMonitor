@@ -173,8 +173,6 @@ int main(int argc, char *argv[])
     app.setApplicationName("StockMonitor");
     app.setApplicationVersion("1.0.0");
     app.setOrganizationName("StockMonitor");
-    app.setStyle("Fusion");
-
     auto config = std::make_shared<StockConfig>();
     MainWindow window(config);
 

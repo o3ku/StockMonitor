@@ -7,10 +7,14 @@
         <file>light/close-button.svg</file>
         <file>light/theme-toggle.svg</file>
         <file>light/settings.svg</file>
+        <file>light/arrow-down.svg</file>
+        <file>light/arrow-up.svg</file>
 
         <file>dark/style.css</file>
         <file>dark/close-button.svg</file>
         <file>dark/theme-toggle.svg</file>
         <file>dark/settings.svg</file>
+        <file>dark/arrow-down.svg</file>
+        <file>dark/arrow-up.svg</file>
     </qresource>
 </RCC>

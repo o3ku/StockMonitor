@@ -1,22 +1,8 @@
-#pragma once
+﻿#pragma once
 
-#include <QApplication>
-#include <QDesktopWidget>
-#include <QFocusEvent>
-#include <QHBoxLayout>
 #include <QHeaderView>
-#include <QKeyEvent>
-#include <QLabel>
-#include <QScreen>
 #include <QStandardItemModel>
-#include <QStyle>
 #include <QTableView>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
-#include <algorithm>
-
-#include "Logger.hpp"
 #include "StockInfo.hpp"
 
 class StockSearchResultTable : public QTableView
@@ -28,7 +14,6 @@ public:
         : QTableView(parent)
         , config_(config)
         , model_(new QStandardItemModel(this))
-        , selectedIndex_(-1)
     {
         hide();
         model_->setColumnCount(2);
@@ -49,21 +34,11 @@ public:
 
     void selectNextRow()
     {
-        auto rows = model_->rowCount();
-        if (rows == 0) return;
-
-        int nextRow = (this->currentIndex().row() + 1 + rows) % rows;
-        this->setCurrentIndex(model_->index(nextRow, 0));
-        this->selectRow(nextRow);
+        selectRelativeRow(1);
     }
     void selectPrevRow()
     {
-        auto rows = model_->rowCount();
-        if (rows == 0) return;
-
-        int prevRow = (this->currentIndex().row() - 1 + rows) % rows;
-        this->setCurrentIndex(model_->index(prevRow, 0));
-        this->selectRow(prevRow);
+        selectRelativeRow(-1);
     }
     void chooseCurrentRow(const QModelIndex &index)
     {
@@ -78,10 +53,6 @@ public:
 
     void showResults(const QList<StockInfo> &results)
     {
-        stocks_ = results;
-        // result_->clear();
-        selectedIndex_ = -1;
-
         model_->clear();
         model_->setColumnCount(2);
         for (auto &&it : results)
@@ -107,9 +78,16 @@ signals:
     void stockSelected(const QString &code);
 
 private:
+    void selectRelativeRow(int delta)
+    {
+        int rows = model_->rowCount();
+        if (rows == 0) return;
+
+        int nextRow = (currentIndex().row() + delta + rows) % rows;
+        setCurrentIndex(model_->index(nextRow, 0));
+        selectRow(nextRow);
+    }
+
     std::shared_ptr<StockConfig> config_;
     QStandardItemModel *model_;
-
-    QList<StockInfo> stocks_;
-    int selectedIndex_;
 };

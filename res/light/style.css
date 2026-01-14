@@ -1,4 +1,4 @@
-/* Light Theme Colors */
+﻿/* Light Theme Colors */
 
 /* Main Window Colors */
 MainWindow {
@@ -73,3 +73,55 @@ QHeaderView::section {
     border-bottom-color: #e8eaed;
     font-size: 13px;
 }
+#settingsPanel {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 0px; /* Remove rounded corners */
+}
+
+#settingsPanel QLabel {
+    color: #333333;
+}
+
+#settingsPanel QComboBox,
+#settingsPanel QSpinBox,
+#settingsPanel QDoubleSpinBox {
+    background-color: #ffffff;
+    border-color: #ced4da;
+    color: #000000;
+}
+
+#settingsPanel QComboBox::down-arrow {
+    image: url(":/light/arrow-down.svg");
+}
+
+#settingsPanel QComboBox::drop-down {
+    border-left: 1px solid #e6e9ed;
+}
+
+#settingsPanel QSpinBox::up-arrow,
+#settingsPanel QDoubleSpinBox::up-arrow {
+    image: url(":/light/arrow-up.svg");
+}
+
+#settingsPanel QSpinBox::down-arrow,
+#settingsPanel QDoubleSpinBox::down-arrow {
+    image: url(":/light/arrow-down.svg");
+}
+
+#settingsPanel QSpinBox::up-button,
+#settingsPanel QDoubleSpinBox::up-button,
+#settingsPanel QSpinBox::down-button,
+#settingsPanel QDoubleSpinBox::down-button {
+    border-left: 1px solid #e6e9ed;
+}
+
+/* Status Bar Colors */
+QStatusBar {
+    background-color: #f8f9fa;
+}
+
+QStatusBar::item {
+    border: none;
+}
+

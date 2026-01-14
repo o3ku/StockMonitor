@@ -1,19 +1,16 @@
-#pragma once
+﻿#pragma once
 
 #include "Logger.hpp"
 #include "StockInfo.hpp"
 #include "StockModel.hpp"
 #include <QAbstractItemView>
 #include <QAction>
-#include <QContextMenuEvent>
 #include <QDragEnterEvent>
 #include <QDragLeaveEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QHeaderView>
-#include <QKeyEvent>
 #include <QMenu>
-#include <QMessageBox>
 #include <QMimeData>
 #include <QPaintEvent>
 #include <QPainter>
@@ -73,19 +70,22 @@ public:
             {
                 setCurrentIndex(index);
 
-                // Update action states
-                int row = index.row();
-                int rowCount = model_->rowCount();
-
-                // Enable/disable move actions based on current position
-                actUp_->setEnabled(row > 0);
-                actDown_->setEnabled(row < rowCount - 1);
-                actTop_->setEnabled(row > 0);
-                actBottom_->setEnabled(row < rowCount - 1);
+                updateMoveActions(index.row(), model_->rowCount());
 
                 menu_->exec(mapToGlobal(pos));
             }
         });
+    }
+
+    void applyRowHeight(int rowHeight)
+    {
+        verticalHeader()->setDefaultSectionSize(rowHeight);
+        int rows = model_->rowCount();
+        for (int row = 0; row < rows; ++row)
+        {
+            setRowHeight(row, rowHeight);
+        }
+        viewport()->update();
     }
 
     void addStock(const QString &stock)
@@ -109,21 +109,11 @@ public:
 
     void selectNextRow()
     {
-        auto rows = model_->rowCount();
-        if (rows == 0) return;
-
-        int nextRow = (this->currentIndex().row() + 1 + rows) % rows;
-        this->setCurrentIndex(model_->index(nextRow, 0));
-        this->selectRow(nextRow);
+        selectRelativeRow(1);
     }
     void selectPrevRow()
     {
-        auto rows = model_->rowCount();
-        if (rows == 0) return;
-
-        int prevRow = (this->currentIndex().row() - 1 + rows) % rows;
-        this->setCurrentIndex(model_->index(prevRow, 0));
-        this->selectRow(prevRow);
+        selectRelativeRow(-1);
     }
 
 protected:
@@ -223,23 +213,6 @@ protected:
         QTableView::dropEvent(event);
     }
 
-    // void keyPressEvent(QKeyEvent *event) override
-    // {
-    //     if (event->key() == Qt::Key_Delete)
-    //     {
-    //         QModelIndex currentIndex = this->currentIndex();
-    //         if (currentIndex.isValid())
-    //         {
-    //             onDeleteStock();
-    //         }
-    //         event->accept();
-    //     }
-    //     else
-    //     {
-    //         QTableView::keyPressEvent(event);
-    //     }
-    // }
-
 private slots:
     void onDeleteStock()
     {
@@ -296,6 +269,24 @@ private slots:
     }
 
 private:
+    void selectRelativeRow(int delta)
+    {
+        int rows = model_->rowCount();
+        if (rows == 0) return;
+
+        int nextRow = (currentIndex().row() + delta + rows) % rows;
+        setCurrentIndex(model_->index(nextRow, 0));
+        selectRow(nextRow);
+    }
+
+    void updateMoveActions(int row, int rowCount)
+    {
+        actUp_->setEnabled(row > 0);
+        actDown_->setEnabled(row < rowCount - 1);
+        actTop_->setEnabled(row > 0);
+        actBottom_->setEnabled(row < rowCount - 1);
+    }
+
     void setupView(int rowHeight)
     {
         setSelectionBehavior(QAbstractItemView::SelectRows);

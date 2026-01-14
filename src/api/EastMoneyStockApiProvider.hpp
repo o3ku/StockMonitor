@@ -4,10 +4,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QRegularExpression>
 #include <QUrl>
 
 #include "IStockApiProvider.hpp"
@@ -218,29 +216,8 @@ private:
                         QString code = stockObj["Code"].toString();
                         QString name = stockObj["Name"].toString();
                         
-                        // Use MktNum to determine market (1=SH, 0=SZ, 116=HK, 105/106=US).
                         QString marketPrefix;
-                        QString marketNum = stockObj["MktNum"].toString();
-                        if (marketNum == "1")
-                        {
-                            marketPrefix = "SH";
-                        }
-                        else if (marketNum == "0")
-                        {
-                            marketPrefix = "SZ";
-                        }
-                        else if (marketNum == "116")
-                        {
-                            marketPrefix = "HK";
-                        }
-                        else if (marketNum == "105" || marketNum == "106")
-                        {
-                            marketPrefix = QString();
-                        }
-                        else
-                        {
-                            continue;
-                        }
+                        if (!marketPrefixForNum(stockObj["MktNum"].toString(), marketPrefix)) continue;
                         
                         // Build standard code.
                         QString standardCode = marketPrefix.isEmpty() ? code.toUpper() : marketPrefix + code;
@@ -343,6 +320,36 @@ private:
         return symbol;
     }
 
+    bool marketPrefixForNum(const QString &marketNum, QString &marketPrefix) const
+    {
+        if (marketNum == "1")
+        {
+            marketPrefix = "SH";
+            return true;
+        }
+        if (marketNum == "0")
+        {
+            marketPrefix = "SZ";
+            return true;
+        }
+        if (marketNum == "116")
+        {
+            marketPrefix = "HK";
+            return true;
+        }
+        if (marketNum == "105" || marketNum == "106")
+        {
+            marketPrefix = QString();
+            return true;
+        }
+        return false;
+    }
+
+    double priceDivisorForMarket(int marketId) const
+    {
+        return (marketId == 116 || marketId == 105 || marketId == 106) ? 1000.0 : 100.0;
+    }
+
     StockInfo parseEasyMoneyStockData(const QString &code, const QJsonObject &stockObj)
     {
         StockInfo stockInfo;
@@ -351,11 +358,7 @@ private:
         stockInfo.setName(stockObj["f14"].toString());
 
         int marketId = stockObj["f13"].toInt();
-        double priceDivisor = 100.0;
-        if (marketId == 116 || marketId == 105 || marketId == 106)
-        {
-            priceDivisor = 1000.0;
-        }
+        double priceDivisor = priceDivisorForMarket(marketId);
 
         double currentPrice = stockObj["f2"].toDouble();
         if (currentPrice > 0)

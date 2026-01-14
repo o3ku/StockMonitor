@@ -10,7 +10,6 @@
 #include <QString>
 #include <QStringList>
 #include <functional>
-#include <memory>
 
 // API Manager class - manages different API providers
 class StockApiService : public QObject

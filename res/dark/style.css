@@ -1,4 +1,4 @@
-/* Dark Theme Colors */
+﻿/* Dark Theme Colors */
 
 /* Main Window Colors */
 MainWindow {
@@ -86,3 +86,78 @@ QHeaderView::section {
     border-bottom-color: #404040;
     font-size: 13px;
 }
+#settingsPanel {
+    background-color: #1e1e1e;
+    border: 1px solid #404040;
+    border-radius: 0px; /* Remove rounded corners */
+}
+
+#settingsPanel QLabel {
+    color: #e0e0e0;
+}
+
+#settingsPanel QComboBox,
+#settingsPanel QSpinBox,
+#settingsPanel QDoubleSpinBox {
+    background-color: #3c3c3c;
+    border-color: #555555;
+    color: #ffffff;
+}
+
+#settingsPanel QComboBox::down-arrow {
+    image: url(":/dark/arrow-down.svg");
+}
+
+#settingsPanel QComboBox::drop-down {
+    border-left: 1px solid #4a4a4a;
+}
+
+QComboBox QAbstractItemView {
+    background-color: #2b2b2b;
+    color: #ffffff;
+    border: 1px solid #555555;
+    selection-background-color: #404040;
+    selection-color: #ffffff;
+    outline: 0;
+}
+
+QComboBox QAbstractItemView::item {
+    /* background-color: transparent; */
+    padding: 4px 8px;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    /* background-color: #404040; */
+    color: #ffffff;
+}
+
+QComboBox QAbstractItemVielw::item:hover {
+    /* background-color: #3a3a3a; */
+}
+
+#settingsPanel QSpinBox::up-arrow,
+#settingsPanel QDoubleSpinBox::up-arrow {
+    image: url(":/dark/arrow-up.svg");
+}
+
+#settingsPanel QSpinBox::down-arrow,
+#settingsPanel QDoubleSpinBox::down-arrow {
+    image: url(":/dark/arrow-down.svg");
+}
+
+#settingsPanel QSpinBox::up-button,
+#settingsPanel QDoubleSpinBox::up-button,
+#settingsPanel QSpinBox::down-button,
+#settingsPanel QDoubleSpinBox::down-button {
+    border-left: 1px solid #4a4a4a;
+}
+
+/* Status Bar Colors */
+QStatusBar {
+    background-color: #1e1e1e;
+}
+
+QStatusBar::item {
+    border: none;
+}
+

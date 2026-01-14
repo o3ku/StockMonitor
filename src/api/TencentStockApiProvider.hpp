@@ -91,34 +91,15 @@ private slots:
                         // 解码Unicode转义序列
                         name = decodeUnicodeEscapes(name);
 
+                        const QString marketLower = market.toLower();
                         QString standardCode;
-                        if (market.toLower() == "us")
+                        if (marketLower == "us")
                         {
                             standardCode = normalizeUsSymbol(code);
                         }
                         else
                         {
-                            // 标准化市场代码
-                            QString marketPrefix;
-                            if (market.toLower() == "sh")
-                            {
-                                marketPrefix = "SH";
-                            }
-                            else if (market.toLower() == "sz")
-                            {
-                                marketPrefix = "SZ";
-                            }
-                            else if (market.toLower() == "hk")
-                            {
-                                marketPrefix = "HK";
-                            }
-                            else
-                            {
-                                marketPrefix = market.toUpper();
-                            }
-
-                            // 构建标准化的股票代码
-                            standardCode = marketPrefix + code;
+                            standardCode = marketPrefixFor(marketLower) + code;
                         }
                         StockInfo result(standardCode, name);
                         results.append(result);
@@ -397,5 +378,13 @@ private:
             symbol = symbol.left(dot);
         }
         return symbol.toUpper();
+    }
+
+    QString marketPrefixFor(const QString &marketLower) const
+    {
+        if (marketLower == "sh") return "SH";
+        if (marketLower == "sz") return "SZ";
+        if (marketLower == "hk") return "HK";
+        return marketLower.toUpper();
     }
 };
