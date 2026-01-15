@@ -53,6 +53,14 @@
         {
             "name": "msvc-release",
             "configurePreset": "msvc-release"
+        },
+        {
+            "name": "static-debug",
+            "configurePreset": "static-debug"
+        },
+        {
+            "name": "static-release",
+            "configurePreset": "static-release"
         }
     ]
 }
