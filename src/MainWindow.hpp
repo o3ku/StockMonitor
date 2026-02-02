@@ -72,7 +72,11 @@ public:
         applyTheme();
         connect(&apiService_, &StockApiService::errorOccurred, this, &MainWindow::onApiError);
         connect(&apiService_, &StockApiService::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
-        connect(&apiService_, &StockApiService::searchCompleted, searchResultWidget_, &StockSearchResultTable::showResults);
+        connect(&apiService_, &StockApiService::searchCompleted, this, [this](const QList<StockInfo> &results) {
+            if (!input_->text().isEmpty()) {
+                searchResultWidget_->showResults(results);
+            }
+        });
         applyApiSource();
 
         setAttribute(Qt::WA_DeleteOnClose, false);
