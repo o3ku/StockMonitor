@@ -19,11 +19,11 @@ public:
     }
     virtual ~IStockApiProvider() = default;
     virtual QString name() const = 0;
-    virtual void searchStocksAsync(const QString &keyword) = 0;
+    virtual void searchStocksAsync(const QString &keyword, quint64 requestId) = 0;
     virtual void getStockInfosAsync(const QStringList &codes) = 0;
 
 signals:
-    void searchCompleted(const QList<StockInfo> &results);
+    void searchCompleted(quint64 requestId, const QString &keyword, const QList<StockInfo> &results);
     void stockInfosReceived(const QList<StockInfo> &stockInfos);
     void errorOccurred(const QString &error);
 

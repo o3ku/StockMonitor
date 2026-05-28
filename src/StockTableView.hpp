@@ -72,7 +72,9 @@ public:
 
                 updateMoveActions(index.row(), model_->rowCount());
 
+                emit contextMenuOpened();
                 menu_->exec(mapToGlobal(pos));
+                emit contextMenuClosed();
             }
         });
     }
@@ -115,6 +117,10 @@ public:
     {
         selectRelativeRow(-1);
     }
+
+signals:
+    void contextMenuOpened();
+    void contextMenuClosed();
 
 protected:
     void paintEvent(QPaintEvent *event) override

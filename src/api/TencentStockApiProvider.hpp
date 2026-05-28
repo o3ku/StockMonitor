@@ -7,6 +7,7 @@
 #include <QRegularExpression>
 #include <QTextCodec>
 #include <QUrl>
+#include <QVariant>
 
 class TencentStockApiProvider : public IStockApiProvider
 {
@@ -23,12 +24,14 @@ public:
         return "tencent";
     }
 
-    void searchStocksAsync(const QString &keyword) override
+    void searchStocksAsync(const QString &keyword, quint64 requestId) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
         QUrl url(QString("https://smartbox.gtimg.cn/s3/?v=2&t=all&c=1&q=%1").arg(encodedKeyword));
         QNetworkRequest req(url);
         auto reply = netmgr_->get(req);
+        reply->setProperty("searchKeyword", keyword);
+        reply->setProperty("searchRequestId", QVariant::fromValue(requestId));
         connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onSearchRequestSucceeded);
         connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
     }
@@ -54,6 +57,8 @@ private slots:
     {
         QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
         if (!reply) return;
+        const QString keyword = reply->property("searchKeyword").toString();
+        const quint64 requestId = reply->property("searchRequestId").toULongLong();
         if (reply->error() != QNetworkReply::NoError)
         {
             emit errorOccurred(QString("Search failed: %1").arg(reply->errorString()));
@@ -108,7 +113,7 @@ private slots:
             }
         }
 
-        emit searchCompleted(results);
+        emit searchCompleted(requestId, keyword, results);
     }
 
     void onStockInfoRequestSucceeded()

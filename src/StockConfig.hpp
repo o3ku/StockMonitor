@@ -5,6 +5,7 @@
 #include <QSettings>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 struct StockConfig
 {
@@ -34,7 +35,16 @@ struct StockConfig
         refreshInterval = settings.value("RefreshInterval", 5000).toInt();
         lastGeometry = settings.value("Rect").toByteArray();
         rowHeight = settings.value("RowHeight", 25).toInt();
-        autoHideDelay = settings.value("AutoHideSeconds", 0).toInt();
+        QVariant autoHideDelayMs = settings.value("AutoHideDelayMs");
+        if (autoHideDelayMs.isValid())
+        {
+            autoHideDelay = autoHideDelayMs.toInt();
+        }
+        else
+        {
+            int legacyDelay = settings.value("AutoHideSeconds", 0).toInt();
+            autoHideDelay = legacyDelay > 0 && legacyDelay <= 30 ? legacyDelay * 1000 : legacyDelay;
+        }
         settings.endGroup();
 
         hotkey = settings.value("Hotkey/Global", "Ctrl+Alt+S").toString();
@@ -58,6 +68,7 @@ struct StockConfig
         settings.setValue("RefreshInterval", refreshInterval);
         settings.setValue("Rect", lastGeometry);
         settings.setValue("RowHeight", rowHeight);
+        settings.setValue("AutoHideDelayMs", autoHideDelay);
         settings.setValue("AutoHideSeconds", autoHideDelay);
         settings.endGroup();
 

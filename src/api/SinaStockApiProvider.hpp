@@ -6,6 +6,7 @@
 #include <QNetworkRequest>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QVariant>
 
 #include "IStockApiProvider.hpp"
 
@@ -24,7 +25,7 @@ public:
         return "sina";
     }
 
-    void searchStocksAsync(const QString &keyword) override
+    void searchStocksAsync(const QString &keyword, quint64 requestId) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
         QString url = QString("http://suggest3.sinajs.cn/suggest/type=2&key=%1").arg(encodedKeyword);
@@ -35,6 +36,8 @@ public:
         request.setRawHeader("Referer", "https://finance.sina.com.cn");
 
         QNetworkReply *reply = netmgr_->get(request);
+        reply->setProperty("searchKeyword", keyword);
+        reply->setProperty("searchRequestId", QVariant::fromValue(requestId));
         connect(reply, &QNetworkReply::finished, this, &SinaStockApiProvider::onSearchFinished);
     }
 
@@ -70,6 +73,8 @@ private slots:
             return;
         }
         reply->deleteLater();
+        const QString keyword = reply->property("searchKeyword").toString();
+        const quint64 requestId = reply->property("searchRequestId").toULongLong();
 
         if (reply->error() != QNetworkReply::NoError)
         {
@@ -79,7 +84,7 @@ private slots:
 
         QString response = QString::fromLocal8Bit(reply->readAll());
         QList<StockInfo> results = parseSinaSearchData(response);
-        emit searchCompleted(results);
+        emit searchCompleted(requestId, keyword, results);
     }
 
     void onStockInfosFinished()

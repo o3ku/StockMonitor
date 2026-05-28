@@ -36,7 +36,8 @@ ApiTestResult runProviderTest(StockApiService &service, const QString &providerN
             result.error = err;
             loop.quit();
         });
-        QMetaObject::Connection searchConn = QObject::connect(&service, &StockApiService::searchCompleted, &loop, [&](const QList<StockInfo> &results) {
+        QMetaObject::Connection searchConn = QObject::connect(
+                &service, &StockApiService::searchCompleted, &loop, [&](quint64, const QString &, const QList<StockInfo> &results) {
             for (const StockInfo &info : results)
             {
                 if (codes.contains(info.code()))

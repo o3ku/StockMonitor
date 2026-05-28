@@ -7,6 +7,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QUrl>
+#include <QVariant>
 
 #include "IStockApiProvider.hpp"
 
@@ -36,7 +37,7 @@ public:
         return "eastmoney";
     }
 
-    void searchStocksAsync(const QString &keyword) override
+    void searchStocksAsync(const QString &keyword, quint64 requestId) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
         QString url = QString("http://searchapi.eastmoney.com/api/suggest/get?input=%1&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&markettype=&count=20")
@@ -48,6 +49,8 @@ public:
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
         QNetworkReply *reply = netmgr_->get(request);
+        reply->setProperty("searchKeyword", keyword);
+        reply->setProperty("searchRequestId", QVariant::fromValue(requestId));
         connect(reply, &QNetworkReply::finished, this, &EastMoneyStockApiProvider::onSearchFinished);
     }
 
@@ -101,6 +104,8 @@ private slots:
         }
 
         reply->deleteLater();
+        const QString keyword = reply->property("searchKeyword").toString();
+        const quint64 requestId = reply->property("searchRequestId").toULongLong();
 
         if (reply->error() != QNetworkReply::NoError)
         {
@@ -111,7 +116,7 @@ private slots:
         // 使用UTF-8编码读取响应数据
         QString response = QString::fromUtf8(reply->readAll());
         QList<StockInfo> results = parseEasyMoneySearchData(response);
-        emit searchCompleted(results);
+        emit searchCompleted(requestId, keyword, results);
     }
 
     void onStockInfosFinished()
