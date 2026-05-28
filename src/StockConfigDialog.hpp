@@ -35,10 +35,11 @@ public:
 
         auto autoHideDelayBox = new QComboBox(this);
         autoHideDelayBox->addItem("禁用", 0);
-        autoHideDelayBox->addItem("2秒", 2000);
-        autoHideDelayBox->addItem("5秒", 5000);
+        autoHideDelayBox->addItem("3秒", 3000);
+        autoHideDelayBox->addItem("6秒", 6000);
         autoHideDelayBox->addItem("10秒", 10000);
-        autoHideDelayBox->setCurrentText(QString("%1秒").arg(config->autoHideDelay / 1000));
+        int autoHideIndex = autoHideDelayBox->findData(config->autoHideDelay);
+        autoHideDelayBox->setCurrentIndex(autoHideIndex != -1 ? autoHideIndex : 0);
         form->addRow("自动隐藏:", autoHideDelayBox);
 
         auto themeCombo = new QComboBox(this);

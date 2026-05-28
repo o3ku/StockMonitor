@@ -62,8 +62,9 @@ public:
         if (!index.isValid() || index.row() >= stocks_.size()) return QVariant();
 
         const QString &code = config_->stockCodes.at(index.row());
-        // if (!stocks_.contains(code)) return {};
-        const StockInfo &stock = stocks_.value(code);
+        const auto stockIt = stocks_.constFind(code);
+        if (stockIt == stocks_.constEnd()) return QVariant();
+        const StockInfo &stock = stockIt.value();
 
         switch (role)
         {
@@ -211,13 +212,15 @@ public:
 
     void updateStocksDetail(const QList<StockInfo> &arr)
     {
-        const QList<StockInfo> updates = filterTrackedStocks(arr);
-        if (updates.isEmpty()) return;
-        for (const StockInfo &it : updates)
+        bool changed = false;
+        for (const StockInfo &it : arr)
         {
-            stocks_[it.code()] = it;
+            auto stockIt = stocks_.find(it.code());
+            if (stockIt == stocks_.end()) continue;
+            stockIt.value() = it;
+            changed = true;
         }
-        if (rowCount() > 0 && columnCount() > 0)
+        if (changed && rowCount() > 0 && columnCount() > 0)
         {
             emit dataChanged(index(0, 0), index(rowCount() - 1, columnCount() - 1),
                 { Qt::DisplayRole, Qt::ForegroundRole, Qt::ToolTipRole });
@@ -272,32 +275,19 @@ public:
     QList<StockInfo> stockData() const
     {
         QList<StockInfo> result;
+        result.reserve(config_->stockCodes.size());
         for (const QString &code : config_->stockCodes)
         {
-            if (stocks_.contains(code))
+            const auto stockIt = stocks_.constFind(code);
+            if (stockIt != stocks_.constEnd())
             {
-                result.append(stocks_.value(code));
+                result.append(stockIt.value());
             }
         }
         return result;
     }
 
 private:
-    QList<StockInfo> filterTrackedStocks(const QList<StockInfo> &arr) const
-    {
-        QSet<QString> trackedCodes = config_->stockCodes.toSet();
-        QList<StockInfo> updates;
-        updates.reserve(arr.size());
-        for (const StockInfo &it : arr)
-        {
-            if (trackedCodes.contains(it.code()))
-            {
-                updates.append(it);
-            }
-        }
-        return updates;
-    }
-
     std::shared_ptr<StockConfig> config_;
     QMap<QString, StockInfo> stocks_;
 };

@@ -6,7 +6,7 @@
 #include "api/TencentStockApiProvider.hpp"
 #include <QMap>
 #include <QObject>
-#include <QPointer>
+#include <QScopedPointer>
 #include <QString>
 #include <QStringList>
 #include <functional>
@@ -25,7 +25,7 @@ public:
 
     IStockApiProvider *activeProvider() const
     {
-        return activeProvider_;
+        return activeProvider_.data();
     }
 
     QString activeProviderName() const
@@ -35,39 +35,48 @@ public:
 
     bool setActiveProvider(const QString &name)
     {
-        IStockApiProvider *provider = getOrCreateProvider(name);
-        if (!provider)
+        const QString normalized = normalizeName(name);
+        const QString resolved = factories_.contains(normalized) ? normalized : QString("sina");
+        const bool exactMatch = resolved == normalized;
+
+        if (activeProvider_ && activeProviderName_ == resolved)
+        {
+            return exactMatch;
+        }
+
+        ProviderFactory factory = factories_.value(resolved);
+        if (!factory)
         {
             emit errorOccurred(QString("No API provider for name: %1").arg(name));
             return false;
         }
 
-        bool exactMatch = provider->name() == normalizeName(name);
-        if (activeProvider_ != provider)
-        {
-            if (activeProvider_) disconnectProvider(activeProvider_);
-            activeProvider_ = provider;
-            connectProvider(activeProvider_);
-            emit providerChanged(activeProvider_->name());
-        }
+        if (activeProvider_) disconnectProvider(activeProvider_.data());
+        activeProvider_.reset(factory(this));
+        activeProviderName_ = resolved;
+        connectProvider(activeProvider_.data());
+        emit providerChanged(activeProvider_->name());
 
         return exactMatch;
     }
 
     IStockApiProvider *getProvider(const QString &name)
     {
-        return getOrCreateProvider(name);
+        setActiveProvider(name);
+        return activeProvider_.data();
     }
 
-    void searchStocksAsync(const QString &keyword)
+    quint64 searchStocksAsync(const QString &keyword)
     {
         ensureActiveProvider();
         if (!activeProvider_)
         {
             emit errorOccurred("No active API provider");
-            return;
+            return 0;
         }
-        activeProvider_->searchStocksAsync(keyword);
+        const quint64 requestId = ++nextSearchRequestId_;
+        activeProvider_->searchStocksAsync(keyword, requestId);
+        return requestId;
     }
 
     void getStockInfosAsync(const QStringList &codes)
@@ -82,7 +91,7 @@ public:
     }
 
 signals:
-    void searchCompleted(const QList<StockInfo> &results);
+    void searchCompleted(quint64 requestId, const QString &keyword, const QList<StockInfo> &results);
     void stockInfosReceived(const QList<StockInfo> &stockInfos);
     void errorOccurred(const QString &error);
     void providerChanged(const QString &name);
@@ -98,22 +107,6 @@ private:
               { "eastmoney", [](QObject *parent) { return new EastMoneyStockApiProvider(parent); } },
           })
     {
-    }
-
-    IStockApiProvider *getOrCreateProvider(const QString &name)
-    {
-        const QString normalized = normalizeName(name);
-        const QString resolved = factories_.contains(normalized) ? normalized : QString("sina");
-
-        QPointer<IStockApiProvider> existing = providers_.value(resolved);
-        if (!existing)
-        {
-            ProviderFactory factory = factories_.value(resolved);
-            if (!factory) return nullptr;
-            existing = factory(this);
-            providers_.insert(resolved, existing);
-        }
-        return existing;
     }
 
     void ensureActiveProvider()
@@ -149,6 +142,7 @@ private:
     }
 
     QMap<QString, ProviderFactory> factories_;
-    QMap<QString, QPointer<IStockApiProvider>> providers_;
-    QPointer<IStockApiProvider> activeProvider_;
+    QScopedPointer<IStockApiProvider> activeProvider_;
+    QString activeProviderName_;
+    quint64 nextSearchRequestId_{ 0 };
 };

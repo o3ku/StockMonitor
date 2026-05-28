@@ -9,6 +9,8 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
+option(STOCKMONITOR_ENABLE_UPX "Compress release executable with UPX" OFF)
+
 find_package(Qt5 REQUIRED COMPONENTS Core Widgets Network Svg)
 find_package(OpenSSL REQUIRED)
 
@@ -30,14 +32,14 @@ if(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
     target_compile_options(${PROJECT_NAME} PRIVATE /utf-8)
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF> $<$<CONFIG:Release>:/INCREMENTAL:NO>)
 
-    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" AND STOCKMONITOR_ENABLE_UPX)
         add_custom_command(TARGET ${PROJECT_NAME}
             POST_BUILD
             COMMAND upx -9 $<TARGET_FILE:${PROJECT_NAME}>
-            COMMENT "Compressing syncqt with UPX -9"
+            COMMENT "Compressing StockMonitor with UPX -9"
             VERBATIM
         )
     endif()
 endif()
-

@@ -72,8 +72,9 @@ public:
         applyTheme();
         connect(&apiService_, &StockApiService::errorOccurred, this, &MainWindow::onApiError);
         connect(&apiService_, &StockApiService::stockInfosReceived, this, &MainWindow::handleStockInfosReceived);
-        connect(&apiService_, &StockApiService::searchCompleted, this, [this](const QList<StockInfo> &results) {
-            if (!input_->text().isEmpty()) {
+        connect(&apiService_, &StockApiService::searchCompleted, this, [this](quint64 requestId, const QString &keyword, const QList<StockInfo> &results) {
+            if (requestId == latestSearchRequestId_ && input_->text().trimmed() == keyword && !keyword.isEmpty())
+            {
                 searchResultWidget_->showResults(results);
             }
         });
@@ -90,11 +91,12 @@ public:
                 hideSearchResults();
                 return;
             }
-            apiService_.searchStocksAsync(text);
+            latestSearchRequestId_ = apiService_.searchStocksAsync(text);
         });
         connect(input_, &QLineEdit::textChanged, this, [this](const QString &text) {
-            if (text.isEmpty())
+            if (text.trimmed().isEmpty())
             {
+                latestSearchRequestId_ = 0;
                 hideSearchResults();
                 return;
             }
@@ -112,6 +114,8 @@ public:
         connect(refreshTimer_, &QTimer::timeout, this, &MainWindow::startRefresh);
         autoHideTimer_->setSingleShot(true);
         connect(autoHideTimer_, &QTimer::timeout, this, &MainWindow::onAutoHideTimeout);
+        connect(table_, &StockTableView::contextMenuOpened, this, &MainWindow::pauseAutoHide);
+        connect(table_, &StockTableView::contextMenuClosed, this, &MainWindow::resumeAutoHide);
         connect(qApp, &QApplication::focusChanged, this, [this](QWidget *, QWidget *curr) {
             if (!isAutoHideEnabled()) return;
             while (curr != nullptr)
@@ -276,11 +280,19 @@ protected:
                     startAutoHideTimer();
                 }
             }
-            else if (etype == QEvent::Close || etype == QEvent::Hide)
+            else if (etype == QEvent::Close)
             {
                 config_->lastGeometry = saveGeometry();
+                autoHideTimer_->stop();
+                autoHideSuspendDepth_ = 0;
                 hide();
                 return true;
+            }
+            else if (etype == QEvent::Hide)
+            {
+                config_->lastGeometry = saveGeometry();
+                autoHideTimer_->stop();
+                autoHideSuspendDepth_ = 0;
             }
         }
         else if (watched == titleBar_)
@@ -321,12 +333,31 @@ protected:
 private:
     bool isAutoHideEnabled() const
     {
-        return config_->autoHideDelay > 0 && !suspendAutoHide_;
+        return isVisible() && config_->autoHideDelay > 0 && autoHideSuspendDepth_ == 0;
     }
 
     void startAutoHideTimer()
     {
         if (isAutoHideEnabled()) autoHideTimer_->start(config_->autoHideDelay);
+    }
+
+    void pauseAutoHide()
+    {
+        ++autoHideSuspendDepth_;
+        autoHideTimer_->stop();
+    }
+
+    void resumeAutoHide()
+    {
+        if (autoHideSuspendDepth_ > 0)
+        {
+            --autoHideSuspendDepth_;
+        }
+
+        if (autoHideSuspendDepth_ == 0 && !cursorInside_)
+        {
+            startAutoHideTimer();
+        }
     }
 
     bool shouldResetAutoHideTimer(QEvent::Type type) const
@@ -378,7 +409,14 @@ private:
 
     void startRefresh()
     {
-        apiService_.getStockInfosAsync(config_->stockCodes + labels_.keys());
+        QStringList codes;
+        codes.reserve(config_->stockCodes.size() + labels_.size());
+        codes.append(config_->stockCodes);
+        for (auto it = labels_.constBegin(); it != labels_.constEnd(); ++it)
+        {
+            codes.append(it.key());
+        }
+        apiService_.getStockInfosAsync(codes);
         if (config_->refreshInterval >= 100)
         {
             refreshTimer_->start(config_->refreshInterval);
@@ -463,8 +501,8 @@ private:
         form->addRow("刷新间隔:", settingsRefreshSpin_);
 
         settingsAutoHideCombo_->addItem("禁用", 0);
-        settingsAutoHideCombo_->addItem("2秒", 2000);
-        settingsAutoHideCombo_->addItem("5秒", 5000);
+        settingsAutoHideCombo_->addItem("3秒", 3000);
+        settingsAutoHideCombo_->addItem("6秒", 6000);
         settingsAutoHideCombo_->addItem("10秒", 10000);
         settingsAutoHideCombo_->setObjectName("settingsCombo");
         form->addRow("自动隐藏:", settingsAutoHideCombo_);
@@ -534,8 +572,7 @@ private:
 
     void showSettingsOverlay()
     {
-        suspendAutoHide_ = true;
-        autoHideTimer_->stop();
+        pauseAutoHide();
         loadSettingsOverlayValues();
         syncSettingsOverlayGeometry();
         settingsOverlay_->raise();
@@ -547,8 +584,7 @@ private:
         if (!settingsOverlay_->isVisible()) return;
         applySettingsOverlayValues();
         settingsOverlay_->hide();
-        suspendAutoHide_ = false;
-        if (!cursorInside_) startAutoHideTimer();
+        resumeAutoHide();
     }
 
     void onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
@@ -721,8 +757,9 @@ private:
     QTimer *autoHideTimer_;
     QTimer *refreshTimer_;
     QTimer *searchDelayTimer_;
+    quint64 latestSearchRequestId_{ 0 };
     bool cursorInside_{ false };
-    bool suspendAutoHide_{ false };
+    int autoHideSuspendDepth_{ 0 };
 
     QMap<QString, QPair<QString, QLabel *>> labels_;
 };

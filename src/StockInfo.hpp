@@ -13,7 +13,7 @@ public:
     {
     }
 
-    QString code() const
+    const QString &code() const
     {
         return m_code;
     }
@@ -22,7 +22,7 @@ public:
         m_code = code.toUpper();
     }
 
-    QString name() const
+    const QString &name() const
     {
         return m_name;
     }
@@ -148,7 +148,7 @@ public:
         m_ask1Volume = volume;
     }
 
-    QString tradeDate() const
+    const QString &tradeDate() const
     {
         return m_tradeDate;
     }
@@ -157,7 +157,7 @@ public:
         m_tradeDate = date;
     }
 
-    QString tradeTime() const
+    const QString &tradeTime() const
     {
         return m_tradeTime;
     }
