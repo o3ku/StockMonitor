@@ -1,12 +1,11 @@
-﻿/* Base Styles - Common Layout and Sizing */
+/* Base Styles - Common Layout and Sizing */
 
 * {
     font: normal 12px "Microsoft Yahei";
 }
 
-/* Main Window Styles */
 MainWindow {
-    border: 2px solid;
+    border: 1px solid;
 }
 
 QWidget#titleBar {
@@ -16,43 +15,66 @@ QWidget#titleBar {
 #titleBar QPushButton,
 QStatusBar QPushButton {
     border: none;
-    border-radius: 15px;
+    border-radius: 0px;
+    margin: 0;
+    padding: 0;
+}
+
+#titleBar QPushButton {
+    min-width: 30px;
+    max-width: 30px;
+    min-height: 30px;
+    max-height: 30px;
 }
 
 #searchInput {
-    padding: 5px 3px;
+    min-height: 16px;
+    padding: 4px 9px;
     border: 1px solid;
+    border-radius: 0px;
 }
 
 #searchInput:focus {
     outline: none;
 }
 
+QStatusBar {
+    border-top: 1px solid;
+}
 
-/* Table View Styles - Minimalist Design */
+QStatusBar QLabel {
+    padding: 0;
+}
+
 QTableView {
-    /* selection-behavior: rows;
-    show-decoration-selected: 1;
-    gridline-color: transparent; */
     border: none;
     outline: none;
+    gridline-color: transparent;
+    show-decoration-selected: 1;
 }
 
 QTableView::item {
     border: none;
+    padding: 0 6px;
 }
 
-QTableView::item:selected {
-    border: none;
-    outline: none;
-}
-
+QTableView::item:selected,
 QTableView::item:selected:focus {
     border: none;
     outline: none;
 }
 
+QTableView#searchResultsList {
+    border: 1px solid;
+}
+
+QTableView#searchResultsList::item {
+    padding: 0 8px;
+}
+
 QHeaderView::section {
+    min-height: 24px;
+    padding: 0 6px;
     border: none;
     border-bottom: 1px solid;
 }
@@ -62,7 +84,9 @@ QHeaderView::section {
 }
 
 #settingsPanel {
-    border-radius: 8px;
+    min-width: 230px;
+    border: 1px solid;
+    border-radius: 0px;
 }
 
 #settingsPanel QLabel {
@@ -72,9 +96,10 @@ QHeaderView::section {
 #settingsPanel QComboBox,
 #settingsPanel QSpinBox,
 #settingsPanel QDoubleSpinBox {
-    padding: 4px 6px;
+    min-height: 14px;
+    padding: 4px 7px;
     border: 1px solid;
-    border-radius: 4px;
+    border-radius: 0px;
 }
 
 #settingsPanel QComboBox:focus,
@@ -84,13 +109,14 @@ QHeaderView::section {
 }
 
 #settingsPanel QComboBox {
-    padding-right: 20px;
+    padding-right: 24px;
 }
 
 #settingsPanel QComboBox::drop-down {
     subcontrol-origin: padding;
     subcontrol-position: top right;
-    width: 18px;
+    width: 22px;
+    border: none;
     background: transparent;
 }
 
@@ -101,14 +127,15 @@ QHeaderView::section {
 
 #settingsPanel QSpinBox,
 #settingsPanel QDoubleSpinBox {
-    padding-right: 18px;
+    padding-right: 22px;
 }
 
 #settingsPanel QSpinBox::up-button,
 #settingsPanel QDoubleSpinBox::up-button {
     subcontrol-origin: border;
     subcontrol-position: top right;
-    width: 18px;
+    width: 20px;
+    border: none;
     background: transparent;
 }
 
@@ -116,7 +143,8 @@ QHeaderView::section {
 #settingsPanel QDoubleSpinBox::down-button {
     subcontrol-origin: border;
     subcontrol-position: bottom right;
-    width: 18px;
+    width: 20px;
+    border: none;
     background: transparent;
 }
 
@@ -126,4 +154,55 @@ QHeaderView::section {
 #settingsPanel QDoubleSpinBox::down-arrow {
     width: 8px;
     height: 8px;
+}
+
+QComboBox QAbstractItemView {
+    outline: 0;
+    border: 1px solid;
+}
+
+QComboBox QAbstractItemView::item {
+    min-height: 22px;
+    padding: 4px 8px;
+}
+
+QMenu {
+    border: 1px solid;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 5px 24px 5px 10px;
+    border-radius: 0px;
+}
+
+QMenu::separator {
+    height: 1px;
+    margin: 4px 6px;
+}
+
+QToolTip {
+    border: 1px solid;
+    border-radius: 0px;
+    padding: 4px 6px;
+}
+
+QScrollBar:vertical {
+    width: 8px;
+    margin: 0;
+    border: none;
+    background: transparent;
+}
+
+QScrollBar::handle:vertical {
+    min-height: 24px;
+    border-radius: 0px;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical,
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    border: none;
+    background: transparent;
 }

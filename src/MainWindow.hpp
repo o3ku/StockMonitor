@@ -16,6 +16,7 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QPalette>
 #include <QPainter>
 #include <QPushButton>
 #include <QSpinBox>
@@ -75,7 +76,10 @@ public:
         connect(&apiService_, &StockApiService::searchCompleted, this, [this](quint64 requestId, const QString &keyword, const QList<StockInfo> &results) {
             if (requestId == latestSearchRequestId_ && input_->text().trimmed() == keyword && !keyword.isEmpty())
             {
-                searchResultWidget_->showResults(results);
+                syncSearchResultsGeometry();
+                const bool hasVisibleResults = searchResultWidget_->showResults(results);
+                setSearchNoResults(!hasVisibleResults);
+                focusSearchInput();
             }
         });
         applyApiSource();
@@ -94,6 +98,7 @@ public:
             latestSearchRequestId_ = apiService_.searchStocksAsync(text);
         });
         connect(input_, &QLineEdit::textChanged, this, [this](const QString &text) {
+            setSearchNoResults(false);
             if (text.trimmed().isEmpty())
             {
                 latestSearchRequestId_ = 0;
@@ -104,6 +109,7 @@ public:
         });
         connect(searchResultWidget_, &StockSearchResultTable::stockSelected, this, [this](auto &&code) {
             hideSearchResults();
+            setSearchNoResults(false);
             input_->clear();
             focusSearchInput();
             table_->addStock(code);
@@ -141,7 +147,9 @@ public:
         titleBar_->installEventFilter(this);
         input_->installEventFilter(this);
         table_->installEventFilter(this);
+        table_->viewport()->installEventFilter(this);
         searchResultWidget_->installEventFilter(this);
+        searchResultWidget_->viewport()->installEventFilter(this);
     }
 
     ~MainWindow()
@@ -171,11 +179,22 @@ protected:
         {
             startAutoHideTimer();
         }
+        if (handleWindowDrag(watched, event)) return true;
         if (etype == QEvent::KeyPress)
         {
             autoHideTimer_->stop();
             auto ke = static_cast<QKeyEvent *>(event);
             auto key = ke->key();
+            if (key == Qt::Key_Comma && (ke->modifiers() & Qt::ControlModifier) && !(ke->modifiers() & (Qt::AltModifier | Qt::MetaModifier)))
+            {
+                openSettings();
+                return true;
+            }
+            if (key == Qt::Key_L && (ke->modifiers() & Qt::ControlModifier) && !(ke->modifiers() & (Qt::AltModifier | Qt::MetaModifier)))
+            {
+                switchTheme();
+                return true;
+            }
             if ((ke->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) == Qt::NoModifier)
             {
                 const QString text = ke->text();
@@ -295,24 +314,6 @@ protected:
                 autoHideSuspendDepth_ = 0;
             }
         }
-        else if (watched == titleBar_)
-        {
-            static QPoint mousePressedPosition;
-            auto me = dynamic_cast<QMouseEvent *>(event);
-            if (etype == QEvent::MouseButtonPress && me->button() == Qt::LeftButton)
-            {
-                mousePressedPosition = me->globalPos() - geometry().topLeft();
-                return true;
-            }
-            else if (etype == QEvent::MouseMove && !mousePressedPosition.isNull() && me->buttons() & Qt::LeftButton)
-            {
-                move(me->globalPos() - mousePressedPosition);
-                return true;
-            }
-            else if (etype == QEvent::MouseButtonRelease && me->button() != Qt::LeftButton)
-                mousePressedPosition = {};
-            return true;
-        }
         return QWidget::eventFilter(watched, event);
     }
 
@@ -369,6 +370,7 @@ private:
         case QEvent::MouseMove:
         case QEvent::MouseButtonPress:
         case QEvent::MouseButtonRelease:
+        case QEvent::InputMethod:
         case QEvent::Wheel:
             return true;
         default:
@@ -376,9 +378,82 @@ private:
         }
     }
 
+    bool handleWindowDrag(QObject *watched, QEvent *event)
+    {
+        const QEvent::Type type = event->type();
+        if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove && type != QEvent::MouseButtonRelease)
+        {
+            return false;
+        }
+
+        QWidget *source = qobject_cast<QWidget *>(watched);
+        QMouseEvent *mouseEvent = dynamic_cast<QMouseEvent *>(event);
+        if (!source || !mouseEvent) return false;
+
+        if (type == QEvent::MouseButtonPress)
+        {
+            if (mouseEvent->button() != Qt::LeftButton || !canStartWindowDrag(source, mouseEvent->pos())) return false;
+            windowDragActive_ = true;
+            windowDragOffset_ = mouseEvent->globalPos() - frameGeometry().topLeft();
+            windowDragSource_ = source;
+            source->grabMouse();
+            return true;
+        }
+
+        if (type == QEvent::MouseMove && windowDragActive_ && (mouseEvent->buttons() & Qt::LeftButton))
+        {
+            move(mouseEvent->globalPos() - windowDragOffset_);
+            return true;
+        }
+
+        if (type == QEvent::MouseButtonRelease && windowDragActive_ && mouseEvent->button() == Qt::LeftButton)
+        {
+            if (windowDragSource_) windowDragSource_->releaseMouse();
+            windowDragActive_ = false;
+            windowDragSource_ = nullptr;
+            return true;
+        }
+
+        return false;
+    }
+
+    bool canStartWindowDrag(QWidget *source, const QPoint &pos) const
+    {
+        if (settingsOverlay_->isVisible() && (source == settingsOverlay_ || settingsOverlay_->isAncestorOf(source))) return false;
+        if (source == table_->viewport()) return !table_->indexAt(pos).isValid();
+        if (source == searchResultWidget_->viewport()) return !searchResultWidget_->indexAt(pos).isValid();
+
+        QWidget *target = source->childAt(pos);
+        if (!target) target = source;
+
+        for (QWidget *widget = target; widget; widget = widget->parentWidget())
+        {
+            if (isWindowDragBlockedBy(widget)) return false;
+            if (widget == this) break;
+        }
+
+        return true;
+    }
+
+    bool isWindowDragBlockedBy(QWidget *widget) const
+    {
+        return widget == input_ || widget == table_ || widget == searchResultWidget_ || widget == settingsOverlay_ || widget == settingsPanel_
+            || qobject_cast<QPushButton *>(widget) || qobject_cast<QLineEdit *>(widget) || qobject_cast<QTableView *>(widget)
+            || qobject_cast<QComboBox *>(widget) || qobject_cast<QSpinBox *>(widget) || qobject_cast<QDoubleSpinBox *>(widget);
+    }
+
     void hideSearchResults()
     {
         searchResultWidget_->hide();
+    }
+
+    void setSearchNoResults(bool noResults)
+    {
+        if (input_->property("searchNoResults").toBool() == noResults) return;
+        input_->setProperty("searchNoResults", noResults);
+        input_->style()->unpolish(input_);
+        input_->style()->polish(input_);
+        input_->update();
     }
 
     void focusSearchInput()
@@ -389,6 +464,7 @@ private:
     void syncSearchResultsGeometry()
     {
         searchResultWidget_->setGeometry(table_->geometry());
+        searchResultWidget_->raise();
     }
 
     void syncSettingsOverlayGeometry()
@@ -435,12 +511,22 @@ private:
                         .arg(title)
                         .arg(config_->getPriceColor(info.isUp()).name())
                         .arg(info.changePercentText()));
-                // 设置tooltip，与表格保持一致
-                label->setToolTip(info.detailedTooltip());
+                label->setToolTip(statusLabelTooltip(info));
             }
         }
 
         table_->updateStocksDetail(stockInfos);
+    }
+
+    QString statusLabelTooltip(const StockInfo &info) const
+    {
+        return QString("%1(%2) %3(%4)\n成交: %5(%6)")
+            .arg(info.name())
+            .arg(info.code())
+            .arg(QString::number(info.currentPrice(), 'f', 2))
+            .arg(info.changePercentText())
+            .arg(info.turnoverText())
+            .arg(info.volumeText());
     }
 
     void onApiError(const QString &error)
@@ -645,9 +731,12 @@ private:
 
         auto statusBar = new QStatusBar(this);
         statusBar->setContentsMargins(0, 0, 0, 0);
+        statusBar->installEventFilter(this);
         statusBar->addWidget(btns_[1]);
         for (auto &&pair : labels_.values())
         {
+            pair.second->setAlignment(Qt::AlignCenter);
+            pair.second->installEventFilter(this);
             statusBar->addWidget(pair.second);
         }
 
@@ -687,11 +776,20 @@ private:
 
     void toggleTheme()
     {
-        auto btn = sender();
-        auto index = btn->property("index").toInt();
-        auto next = (index + 1) % config_->availableThemes.size();
-        btn->setProperty("index", next);
-        applyTheme(config_->availableThemes.value(next));
+        switchTheme();
+    }
+
+    void switchTheme()
+    {
+        int index = config_->availableThemes.indexOf(config_->theme);
+        if (index < 0) index = 0;
+        const int next = (index + 1) % config_->availableThemes.size();
+        const QString theme = config_->availableThemes.value(next);
+        applyTheme(theme);
+        config_->save();
+
+        const int comboIndex = settingsThemeCombo_->findData(theme);
+        if (comboIndex != -1) settingsThemeCombo_->setCurrentIndex(comboIndex);
     }
 
     void applyTheme(const QString &theme = "")
@@ -713,6 +811,55 @@ private:
         qApp->style()->unpolish(qApp);
         qApp->setStyleSheet(css.join("\n"));
         qApp->style()->polish(qApp);
+        updateSettingsComboPopups();
+        refreshStyledWidgets();
+    }
+
+    void refreshStyledWidgets()
+    {
+        for (QWidget *widget : QApplication::allWidgets())
+        {
+            if (!widget) continue;
+            widget->style()->unpolish(widget);
+            widget->style()->polish(widget);
+            widget->update();
+        }
+
+        table_->viewport()->update();
+        searchResultWidget_->viewport()->update();
+        update();
+    }
+
+    void updateSettingsComboPopups()
+    {
+        const bool dark = config_->isDarkTheme();
+        const QColor text = dark ? QColor("#e7ecf2") : QColor("#1f2933");
+        const QColor background = dark ? QColor("#18212b") : QColor("#ffffff");
+        const QColor selectedText = dark ? QColor("#ffffff") : QColor("#111827");
+        const QColor selectedBackground = dark ? QColor("#223f46") : QColor("#d7ece8");
+        const QColor border = dark ? QColor("#344252") : QColor("#c9d3df");
+        const QColor hover = dark ? QColor("#253140") : QColor("#ecf3f8");
+
+        const QString viewStyle = QString(
+            "QAbstractItemView { background-color: %1; color: %2; border: 1px solid %3; outline: 0; }"
+            "QAbstractItemView::item { min-height: 22px; padding: 4px 8px; }"
+            "QAbstractItemView::item:hover { background-color: %4; color: %2; }"
+            "QAbstractItemView::item:selected { background-color: %5; color: %6; }")
+                                      .arg(background.name(), text.name(), border.name(), hover.name(), selectedBackground.name(), selectedText.name());
+
+        for (QComboBox *combo : { settingsApiSource_, settingsAutoHideCombo_, settingsThemeCombo_ })
+        {
+            if (!combo || !combo->view()) continue;
+            QPalette palette = combo->view()->palette();
+            palette.setColor(QPalette::Base, background);
+            palette.setColor(QPalette::Text, text);
+            palette.setColor(QPalette::Window, background);
+            palette.setColor(QPalette::HighlightedText, selectedText);
+            palette.setColor(QPalette::Highlight, selectedBackground);
+            combo->view()->setPalette(palette);
+            combo->view()->setStyleSheet(viewStyle);
+            combo->view()->update();
+        }
     }
 
     void applyApiSource()
@@ -760,6 +907,9 @@ private:
     quint64 latestSearchRequestId_{ 0 };
     bool cursorInside_{ false };
     int autoHideSuspendDepth_{ 0 };
+    bool windowDragActive_{ false };
+    QPoint windowDragOffset_;
+    QWidget *windowDragSource_{ nullptr };
 
     QMap<QString, QPair<QString, QLabel *>> labels_;
 };

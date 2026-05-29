@@ -51,7 +51,7 @@ public:
         }
     }
 
-    void showResults(const QList<StockInfo> &results)
+    bool showResults(const QList<StockInfo> &results)
     {
         model_->clear();
         model_->setColumnCount(2);
@@ -71,7 +71,19 @@ public:
             }
             model_->appendRow(items);
         }
+
+        if (model_->rowCount() == 0)
+        {
+            hide();
+            return false;
+        }
+
+        setColumnWidth(0, qMin(92, qMax(64, viewport()->width() / 3)));
+        horizontalHeader()->setStretchLastSection(true);
+        selectRow(0);
+        raise();
         show();
+        return true;
     }
 
 signals:

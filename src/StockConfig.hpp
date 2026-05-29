@@ -85,11 +85,11 @@ struct StockConfig
     {
         if (up)
         {
-            return isDarkTheme() ? QColor(255, 85, 85) : QColor(220, 20, 60);
+            return isDarkTheme() ? QColor("#EB7A69") : QColor(220, 20, 60);
         }
         else
         {
-            return isDarkTheme() ? QColor(85, 255, 85) : QColor(34, 139, 34);
+            return isDarkTheme() ? QColor("#76E0A1") : QColor(34, 139, 34);
         }
     }
 

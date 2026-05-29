@@ -222,7 +222,7 @@ private:
                         QString name = stockObj["Name"].toString();
                         
                         QString marketPrefix;
-                        if (!marketPrefixForNum(stockObj["MktNum"].toString(), marketPrefix)) continue;
+                        if (!marketPrefixForNum(marketNumText(stockObj["MktNum"]), marketPrefix)) continue;
                         
                         // Build standard code.
                         QString standardCode = marketPrefix.isEmpty() ? code.toUpper() : marketPrefix + code;
@@ -348,6 +348,13 @@ private:
             return true;
         }
         return false;
+    }
+
+    QString marketNumText(const QJsonValue &value) const
+    {
+        if (value.isString()) return value.toString();
+        if (value.isDouble()) return QString::number(value.toInt());
+        return QString();
     }
 
     double priceDivisorForMarket(int marketId) const
