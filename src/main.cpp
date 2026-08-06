@@ -167,7 +167,8 @@ int main(int argc, char *argv[])
     QLocalServer::removeServer(serverName); // cleanup from previous crashes
     QLocalServer *server = new QLocalServer(&app);
     if (!server->listen(serverName)) {
-        return 0;
+        qWarning() << "Failed to start local server:" << server->errorString();
+        return 1;
     }
 
     app.setQuitOnLastWindowClosed(false);

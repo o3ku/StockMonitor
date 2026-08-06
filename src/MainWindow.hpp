@@ -817,17 +817,11 @@ private:
 
     void refreshStyledWidgets()
     {
-        for (QWidget *widget : QApplication::allWidgets())
-        {
-            if (!widget) continue;
-            widget->style()->unpolish(widget);
-            widget->style()->polish(widget);
-            widget->update();
-        }
-
+        style()->unpolish(this);
+        style()->polish(this);
+        update();
         table_->viewport()->update();
         searchResultWidget_->viewport()->update();
-        update();
     }
 
     void updateSettingsComboPopups()
