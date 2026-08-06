@@ -60,10 +60,9 @@ public:
         return exactMatch;
     }
 
-    IStockApiProvider *getProvider(const QString &name)
+    void switchProvider(const QString &name)
     {
         setActiveProvider(name);
-        return activeProvider_.data();
     }
 
     quint64 searchStocksAsync(const QString &keyword)

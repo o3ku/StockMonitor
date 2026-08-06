@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSet>
 #include <QUrl>
 #include <QVariant>
 
@@ -57,21 +58,32 @@ public:
     void getStockInfosAsync(const QStringList &codes) override
     {
         QStringList formattedCodes;
+        QSet<QString> seenCodes;
         for (const QString &code : codes)
         {
             if (isUsSymbol(code))
             {
                 QString symbol = normalizeUsSymbol(code);
-                formattedCodes.append(QString("105.%1").arg(symbol));
-                formattedCodes.append(QString("106.%1").arg(symbol));
+                for (const QString &prefix : { "105", "106" })
+                {
+                    QString secid = QString("%1.%2").arg(prefix, symbol);
+                    if (!seenCodes.contains(secid))
+                    {
+                        seenCodes.insert(secid);
+                        formattedCodes.append(secid);
+                    }
+                }
             }
             else
             {
                 QString formattedCode = formatStockCode(code);
-                formattedCodes.append(formattedCode);
+                if (!seenCodes.contains(formattedCode))
+                {
+                    seenCodes.insert(formattedCode);
+                    formattedCodes.append(formattedCode);
+                }
             }
         }
-        formattedCodes.removeDuplicates();
 
         // 东方财富API字段说明：
         // f1:市场代码 f2:最新价 f3:涨跌幅 f4:涨跌额 f5:成交量 f6:成交额

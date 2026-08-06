@@ -114,8 +114,7 @@ public:
         {
             switch (role)
             {
-            case Qt::DisplayRole: {
-
+            case Qt::DisplayRole:
                 switch (section)
                 {
                 case NameColumn:
@@ -125,7 +124,6 @@ public:
                 case ChangePercentColumn:
                     return "Change";
                 }
-            }
             case Qt::TextAlignmentRole:
                 return section == 0 ? Qt::AlignLeft : Qt::AlignRight;
             }
