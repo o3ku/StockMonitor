@@ -34,13 +34,4 @@ if(WIN32)
     target_compile_definitions(${PROJECT_NAME} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_link_options(${PROJECT_NAME} PRIVATE $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF> $<$<CONFIG:Release>:/INCREMENTAL:NO>)
 
-    if(CMAKE_BUILD_TYPE STREQUAL "Release" AND STOCKMONITOR_ENABLE_UPX)
-        find_program(UPX_EXECUTABLE upx REQUIRED)
-        add_custom_command(TARGET ${PROJECT_NAME}
-            POST_BUILD
-            COMMAND ${UPX_EXECUTABLE} -9 $<TARGET_FILE:${PROJECT_NAME}>
-            COMMENT "Compressing StockMonitor with UPX -9"
-            VERBATIM
-        )
-    endif()
 endif()

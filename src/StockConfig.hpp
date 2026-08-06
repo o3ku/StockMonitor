@@ -52,7 +52,8 @@ struct StockConfig
 
     ~StockConfig()
     {
-        save();
+        if (QCoreApplication::instance())
+            save();
     }
 
     void save()

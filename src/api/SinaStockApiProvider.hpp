@@ -1,10 +1,12 @@
 ﻿#pragma once
 
 #include <QDateTime>
+#include <QHash>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QTextCodec>
 #include <QUrl>
 #include <QVariant>
 
@@ -82,7 +84,8 @@ private slots:
             return;
         }
 
-        QString response = QString::fromLocal8Bit(reply->readAll());
+        static const QTextCodec *gbk = QTextCodec::codecForName("GBK");
+        QString response = gbk->toUnicode(reply->readAll());
         QList<StockInfo> results = parseSinaSearchData(response);
         emit searchCompleted(requestId, keyword, results);
     }
@@ -102,7 +105,8 @@ private slots:
         QStringList stockCodes = reply->property("stockCodes").toStringList();
         QStringList formattedCodes = reply->property("formattedCodes").toStringList();
 
-        QString response = QString::fromLocal8Bit(reply->readAll());
+        static const QTextCodec *gbk = QTextCodec::codecForName("GBK");
+        QString response = gbk->toUnicode(reply->readAll());
         QList<StockInfo> stockInfos = parseSinaBatchStockData(stockCodes, formattedCodes, response);
         emit stockInfosReceived(stockInfos);
 
@@ -207,23 +211,32 @@ private:
     QList<StockInfo> parseSinaBatchStockData(const QStringList &originalCodes, const QStringList &formattedCodes, const QString &response)
     {
         QList<StockInfo> stockInfos;
+
+        // Build a hash map from formattedCode to full line for O(1) lookup
+        QHash<QString, QString> codeToLine;
         QStringList lines = response.split("\n", Qt::SkipEmptyParts);
+        for (const QString &line : lines)
+        {
+            // Response format: var hq_str_CODE="data"
+            QString prefix = "hq_str_";
+            int idx = line.indexOf(prefix);
+            if (idx >= 0)
+            {
+                QString code = line.mid(idx + 7);
+                int eqPos = code.indexOf('=');
+                if (eqPos >= 0)
+                {
+                    codeToLine.insertMulti(code.left(eqPos), line);
+                }
+            }
+        }
 
         for (int i = 0; i < originalCodes.size() && i < formattedCodes.size(); ++i)
         {
             const QString &originalCode = originalCodes[i];
             const QString &formattedCode = formattedCodes[i];
 
-            QString stockLine;
-            for (const QString &line : lines)
-            {
-                if (line.contains(QString("hq_str_%1").arg(formattedCode)))
-                {
-                    stockLine = line;
-                    break;
-                }
-            }
-
+            QString stockLine = codeToLine.value(formattedCode);
             if (!stockLine.isEmpty())
             {
                 StockInfo stockInfo = parseSinaStockData(originalCode, stockLine);
@@ -243,7 +256,8 @@ private:
 
         const QString formattedCode = formatStockCode(code);
         const bool isHongKong = formattedCode.startsWith("hk");
-        QRegularExpression pattern(QString("var hq_str_%1=\"([^\"]+)\"").arg(formattedCode));
+        // Match: hq_str_CODE="data" (without "var hq_str_" prefix since response lines are stored as-is)
+        QRegularExpression pattern(QString("hq_str_%1=\"([^\"]+)\"").arg(formattedCode));
         QRegularExpressionMatch match = pattern.match(response);
 
         if (match.hasMatch())
@@ -288,7 +302,30 @@ private:
                 stockInfo.setTradeDate(fields[30]);
                 stockInfo.setTradeTime(fields[31]);
 
-                if (stockInfo.yesterday() > 0 && stockInfo.currentPrice())
+                if (stockInfo.yesterday() > 0 && stockInfo.currentPrice() > 0)
+                {
+                    double change = stockInfo.currentPrice() - stockInfo.yesterday();
+                    double changePercent = stockInfo.yesterday() > 0 ? (change / stockInfo.yesterday()) * 100 : 0;
+                    stockInfo.setChange(change);
+                    stockInfo.setChangePercent(changePercent);
+                }
+                stockInfo.setLastUpdate(QDateTime::currentDateTime());
+            }
+            else if (isUsSymbol(formattedCode) && fields.size() >= 35)
+            {
+                stockInfo.setCode(code);
+                stockInfo.setName(fields[0]);
+                stockInfo.setCurrentPrice(fields[1].toDouble());
+                stockInfo.setHigh(fields[2].toDouble());
+                stockInfo.setLow(fields[3].toDouble());
+                stockInfo.setOpenPrice(fields[4].toDouble());
+                stockInfo.setYesterday(fields[5].toDouble());
+                stockInfo.setVolume(fields[10].toLongLong());
+                stockInfo.setTurnover(fields[11].toDouble());
+                stockInfo.setTradeDate(fields[26]);
+                stockInfo.setTradeTime(fields[27]);
+
+                if (stockInfo.yesterday() > 0 && stockInfo.currentPrice() > 0)
                 {
                     double change = stockInfo.currentPrice() - stockInfo.yesterday();
                     double changePercent = stockInfo.yesterday() > 0 ? (change / stockInfo.yesterday()) * 100 : 0;
