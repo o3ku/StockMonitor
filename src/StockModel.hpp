@@ -3,11 +3,14 @@
 #include "Logger.hpp"
 #include "StockInfo.hpp"
 #include <QAbstractTableModel>
+#include <QColor>
 #include <QDataStream>
+#include <QFont>
 #include <QMap>
 #include <QMimeData>
 #include <QSet>
 #include <QStringList>
+#include <algorithm>
 
 // MIME type constants for drag and drop
 namespace StockConstants
@@ -32,6 +35,14 @@ public:
         : QAbstractTableModel(parent)
         , config_(config)
     {
+        // Keep only codes that are still in the list; drop order duplicates.
+        QSet<QString> valid(config_->stockCodes.cbegin(), config_->stockCodes.cend());
+        config_->pinnedStocks.erase(std::remove_if(config_->pinnedStocks.begin(), config_->pinnedStocks.end(),
+            [&](const QString &c) { return !valid.contains(c); }),
+            config_->pinnedStocks.end());
+        config_->pinnedStocks.erase(std::unique(config_->pinnedStocks.begin(), config_->pinnedStocks.end()),
+            config_->pinnedStocks.end());
+
         for (auto &&it : config_->stockCodes)
         {
             stocks_[it] = StockInfo(it);
@@ -43,6 +54,12 @@ public:
     {
         static QList<int> widths{ 90, 70, 70 };
         return widths.value(col);
+    }
+
+    // Rows [0, pinnedCount) are pinned and always stay on top.
+    int pinnedCount() const
+    {
+        return config_->pinnedStocks.size();
     }
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override
@@ -98,6 +115,22 @@ public:
                 return config_->getPriceColor(stock.isUp());
             case NameColumn:
                 return config_->getTextColor();
+            }
+            break;
+
+        case Qt::BackgroundRole:
+            if (index.row() < pinnedCount())
+            {
+                return config_->isDarkTheme() ? QColor(56, 56, 62) : QColor(255, 244, 189);
+            }
+            break;
+
+        case Qt::FontRole:
+            if (index.row() < pinnedCount())
+            {
+                QFont font;
+                font.setBold(true);
+                return font; // shortcut: bold+bg marks pinned rows; no badge column
             }
             break;
 
@@ -225,16 +258,19 @@ public:
         }
     }
     
-    void addStock(const QString &code)
+    // Returns the row the stock was inserted at, or -1 if it already exists.
+    int addStock(const QString &code)
     {
-        if (config_->stockCodes.contains(code)) return;
-        beginInsertRows(QModelIndex(), 0, 0);
-        config_->stockCodes.prepend(code);
+        if (config_->stockCodes.contains(code)) return -1;
+        // Insert below the pinned block so pinned rows stay on top
+        int row = config_->pinnedStocks.size();
+        beginInsertRows(QModelIndex(), row, row);
+        config_->stockCodes.insert(row, code);
         stocks_[code] = StockInfo(code);
         endInsertRows();
         config_->save();
+        return row;
     }
-
     void removeStock(int row)
     {
         if (row >= 0 && row < config_->stockCodes.size())
@@ -242,16 +278,26 @@ public:
             QString code = config_->stockCodes.at(row);
             beginRemoveRows(QModelIndex(), row, row);
             config_->stockCodes.removeAt(row);
+            config_->pinnedStocks.removeAll(code);
             stocks_.remove(code);
             endRemoveRows();
             config_->save();
         }
     }
 
-    void moveStock(int from, int to)
+    // Moves within the source row's block (pinned rows stay on top);
+    // returns the actual row landed on, or -1 if no move happened.
+    int moveStock(int from, int to)
     {
         if (from >= 0 && from < config_->stockCodes.size() && to >= 0 && to < config_->stockCodes.size() && from != to)
         {
+            // Pinned rows form the top block; clamp moves to the source row's own block
+            if (from < config_->pinnedStocks.size())
+                to = qMin(to, config_->pinnedStocks.size() - 1);
+            else if (to < config_->pinnedStocks.size())
+                to = config_->pinnedStocks.size();
+            if (from == to) return -1;
+
             // Calculate the correct destination index for beginMoveRows
             int destinationIndex = to;
             if (to > from) destinationIndex++;  // When moving down, destination is after the target row
@@ -262,12 +308,45 @@ public:
                 config_->stockCodes.insert(to, code);
                 endMoveRows();
                 config_->save();
+                return to;
             }
             else
             {
                 Logger::error(QString("Failed to begin move rows from %1 to %2").arg(from).arg(to));
             }
         }
+        return -1;
+    }
+
+    bool isPinned(int row) const
+    {
+        return row >= 0 && row < config_->stockCodes.size()
+            && config_->pinnedStocks.contains(config_->stockCodes.at(row));
+    }
+
+    // Pin: move row to the bottom of the pinned block. Unpin: move it to the
+    // top of the normal block. Pinned block always stays on top.
+    int setPinned(int row, bool pinned)
+    {
+        if (row < 0 || row >= config_->stockCodes.size()) return -1;
+
+        QString code = config_->stockCodes.at(row);
+        int pinnedCount = config_->pinnedStocks.size();
+        if (pinned == config_->pinnedStocks.contains(code)) return row;
+        int target = pinned ? pinnedCount : pinnedCount - 1;
+        moveStock(row, target);
+        if (pinned)
+            config_->pinnedStocks.append(code);
+        else
+            config_->pinnedStocks.removeAll(code);
+
+        // Rows shifted between blocks need restyle (bold/background)
+        int lo = qMin(row, target);
+        int hi = qMax(row, target);
+        emit dataChanged(index(lo, 0), index(hi, columnCount() - 1),
+            { Qt::DisplayRole, Qt::ForegroundRole, Qt::BackgroundRole, Qt::FontRole });
+        config_->save();
+        return target;
     }
 
     QList<StockInfo> stockData() const

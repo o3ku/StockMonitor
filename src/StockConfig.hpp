@@ -10,6 +10,7 @@
 struct StockConfig
 {
     QStringList stockCodes;
+    QStringList pinnedStocks;
     QString apiSource;
     QString hotkey{ "Ctrl+Alt+S" };
     QString theme{ "light" };
@@ -28,6 +29,7 @@ struct StockConfig
 
         apiSource = settings.value("api/source", "sina").toString();
         stockCodes = settings.value("Stock/Codes").toString().split(",", Qt::SkipEmptyParts);
+        pinnedStocks = settings.value("Stock/Pinned").toString().split(",", Qt::SkipEmptyParts);
 
         settings.beginGroup("UI");
         theme = settings.value("Theme", "light").toString();
@@ -61,6 +63,7 @@ struct StockConfig
         QSettings settings(filepath_, QSettings::IniFormat);
         settings.setValue("api/source", apiSource);
         settings.setValue("Stock/Codes", stockCodes.join(","));
+        settings.setValue("Stock/Pinned", pinnedStocks.join(","));
 
         // Save [UI] section
         settings.beginGroup("UI");

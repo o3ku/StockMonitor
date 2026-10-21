@@ -92,11 +92,11 @@ public:
 
     void addStock(const QString &stock)
     {
-        model_->addStock(stock);
-        auto row0 = model_->index(0, 0);
-        setCurrentIndex(row0);
-        scrollTo(row0);
-        selectRow(0);
+        int row0 = model_->addStock(stock);
+        if (row0 < 0) row0 = 0;
+        setCurrentIndex(model_->index(row0, 0));
+        scrollTo(model_->index(row0, 0));
+        selectRow(row0);
     }
 
     void removeCurrent()
@@ -235,8 +235,8 @@ private slots:
         if (currentIndex.isValid() && currentIndex.row() > 0)
         {
             int currentRow = currentIndex.row();
-            model_->moveStock(currentRow, currentRow - 1);
-            setCurrentIndex(model_->index(currentRow - 1, 0));
+            int row = model_->moveStock(currentRow, currentRow - 1);
+            if (row >= 0) setCurrentIndex(model_->index(row, 0));
         }
     }
 
@@ -246,8 +246,8 @@ private slots:
         if (currentIndex.isValid() && currentIndex.row() < model_->rowCount() - 1)
         {
             int currentRow = currentIndex.row();
-            model_->moveStock(currentRow, currentRow + 1);
-            setCurrentIndex(model_->index(currentRow + 1, 0));
+            int row = model_->moveStock(currentRow, currentRow + 1);
+            if (row >= 0) setCurrentIndex(model_->index(row, 0));
         }
     }
 
@@ -257,8 +257,8 @@ private slots:
         if (currentIndex.isValid() && currentIndex.row() > 0)
         {
             int currentRow = currentIndex.row();
-            model_->moveStock(currentRow, 0);
-            setCurrentIndex(model_->index(0, 0));
+            int row = model_->moveStock(currentRow, 0);
+            if (row >= 0) setCurrentIndex(model_->index(row, 0));
         }
     }
 
@@ -268,9 +268,8 @@ private slots:
         if (currentIndex.isValid() && currentIndex.row() < model_->rowCount() - 1)
         {
             int currentRow = currentIndex.row();
-            int lastRow = model_->rowCount() - 1;
-            model_->moveStock(currentRow, lastRow);
-            setCurrentIndex(model_->index(lastRow, 0));
+            int row = model_->moveStock(currentRow, model_->rowCount() - 1);
+            if (row >= 0) setCurrentIndex(model_->index(row, 0));
         }
     }
 
@@ -291,6 +290,11 @@ private:
         actDown_->setEnabled(row < rowCount - 1);
         actTop_->setEnabled(row > 0);
         actBottom_->setEnabled(row < rowCount - 1);
+
+        bool pinned = model_->isPinned(row);
+
+        actPin_->setVisible(!pinned);
+        actUnpin_->setVisible(pinned);
     }
 
     void setupView(int rowHeight)
@@ -331,6 +335,15 @@ private:
         actTop_ = menu_->addAction("Move to Top", this, &StockTableView::onMoveToTop);
         actBottom_ = menu_->addAction("Move to Bottom", this, &StockTableView::onMoveToBottom);
         menu_->addSeparator();
+        actPin_ = menu_->addAction("Pin to Top", this, [this] {
+            int row = model_->setPinned(currentIndex().row(), true);
+            if (row >= 0) setCurrentIndex(model_->index(row, 0));
+        });
+        actUnpin_ = menu_->addAction("Unpin", this, [this] {
+            int row = model_->setPinned(currentIndex().row(), false);
+            if (row >= 0) setCurrentIndex(model_->index(row, 0));
+        });
+        menu_->addSeparator();
         actDelete_ = menu_->addAction("Delete", this, &StockTableView::onDeleteStock);
     }
 
@@ -343,5 +356,7 @@ private:
     QAction *actDown_;
     QAction *actTop_;
     QAction *actBottom_;
+    QAction *actPin_;
+    QAction *actUnpin_;
     int dopIndicatorRow_;
 };
