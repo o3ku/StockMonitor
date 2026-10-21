@@ -10,7 +10,6 @@
 #include <QMimeData>
 #include <QSet>
 #include <QStringList>
-#include <algorithm>
 
 // MIME type constants for drag and drop
 namespace StockConstants
@@ -35,14 +34,23 @@ public:
         : QAbstractTableModel(parent)
         , config_(config)
     {
-        // Keep only codes that are still in the list; drop order duplicates.
-        QSet<QString> valid(config_->stockCodes.cbegin(), config_->stockCodes.cend());
-        config_->pinnedStocks.erase(std::remove_if(config_->pinnedStocks.begin(), config_->pinnedStocks.end(),
-            [&](const QString &c) { return !valid.contains(c); }),
-            config_->pinnedStocks.end());
-        config_->pinnedStocks.erase(std::unique(config_->pinnedStocks.begin(), config_->pinnedStocks.end()),
-            config_->pinnedStocks.end());
-
+        // The ini is external input: sanitize pinned entries (drop unknown/dup)
+        // and force pinned codes to actually occupy the leading rows.
+        QSet<QString> pinnedSet;
+        for (const QString &c : config_->pinnedStocks)
+        {
+            if (config_->stockCodes.contains(c)) pinnedSet.insert(c);
+        }
+        config_->pinnedStocks = pinnedSet.values();
+        if (!pinnedSet.isEmpty())
+        {
+            QStringList pinned, normal;
+            for (const QString &c : config_->stockCodes)
+            {
+                (pinnedSet.contains(c) ? pinned : normal).append(c);
+            }
+            config_->stockCodes = pinned + normal;
+        }
         for (auto &&it : config_->stockCodes)
         {
             stocks_[it] = StockInfo(it);
@@ -289,6 +297,7 @@ public:
     // returns the actual row landed on, or -1 if no move happened.
     int moveStock(int from, int to)
     {
+        if (to >= config_->stockCodes.size()) to = config_->stockCodes.size() - 1;  // drop-at-end passes to == size
         if (from >= 0 && from < config_->stockCodes.size() && to >= 0 && to < config_->stockCodes.size() && from != to)
         {
             // Pinned rows form the top block; clamp moves to the source row's own block

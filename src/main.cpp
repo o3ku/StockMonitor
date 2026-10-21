@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
 
     app.setQuitOnLastWindowClosed(false);
     app.setApplicationName("StockMonitor");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion(STOCKMONITOR_VERSION);
     app.setOrganizationName("StockMonitor");
     auto config = std::make_shared<StockConfig>();
     MainWindow window(config);

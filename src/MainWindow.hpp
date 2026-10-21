@@ -14,7 +14,6 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
-#include <QMessageBox>
 #include <QMouseEvent>
 #include <QPalette>
 #include <QPainter>
@@ -531,26 +530,24 @@ private:
 
     void onApiError(const QString &error)
     {
+        // Polling errors are routine (offline, API hiccup); log only, never modal-spam.
         Logger::error(QString("API Error: %1").arg(error));
-        // Show error message for critical errors
-        if (error.contains("network", Qt::CaseInsensitive))
-        {
-            QMessageBox::warning(this, "Network Error", QString("Network request failed: %1\nPlease check your network connection.").arg(error));
-        }
     }
 
     void onCloseButtonClicked()
     {
-        // Check if Alt key is pressed
         if (QApplication::keyboardModifiers() & Qt::AltModifier)
         {
             QApplication::quit();
+            return;
         }
-        else
+        // No tray icon: hiding would strand the window behind the hotkey only.
+        if (!QSystemTrayIcon::isSystemTrayAvailable())
         {
-            // Normal click: Hide to system tray instead of quitting
-            hide();
+            QApplication::quit();
+            return;
         }
+        hide();
     }
 
     void openSettings()
@@ -774,10 +771,6 @@ private:
         connect(tray, &QSystemTrayIcon::activated, this, &MainWindow::onTrayIconActivated);
     }
 
-    void toggleTheme()
-    {
-        switchTheme();
-    }
 
     void switchTheme()
     {

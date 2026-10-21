@@ -41,12 +41,13 @@ public:
     void searchStocksAsync(const QString &keyword, quint64 requestId) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
-        QString url = QString("http://searchapi.eastmoney.com/api/suggest/get?input=%1&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&markettype=&count=20")
+        QString url = QString("https://searchapi.eastmoney.com/api/suggest/get?input=%1&type=14&token=D43BF722C8E33BDC906FB84D85E326E8&markettype=&count=20")
                           .arg(encodedKeyword);
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setTransferTimeout(15000);
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
         QNetworkReply *reply = netmgr_->get(request);
@@ -91,13 +92,14 @@ public:
         // f12:股票代码 f13:市场 f14:股票名称 f15:最高 f16:最低 f17:开盘价 f18:昨收
         // f20:总市值 f21:流通市值 f22:涨速 f23:市净率 f24:60日涨跌幅 f25:年初至今涨跌幅
         QString url = QString(
-            "http://push2.eastmoney.com/api/qt/ulist.np/"
+            "https://push2.eastmoney.com/api/qt/ulist.np/"
             "get?fields=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16,f17,f18,f19,f20,f21,f22,f23,f24,f25,f33,f62,f128,f136,f115,f152&secids=%1")
                           .arg(formattedCodes.join(","));
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setTransferTimeout(15000);
         request.setRawHeader("Referer", "http://quote.eastmoney.com");
 
         QNetworkReply *reply = netmgr_->get(request);

@@ -286,10 +286,14 @@ private:
 
     void updateMoveActions(int row, int rowCount)
     {
-        actUp_->setEnabled(row > 0);
-        actDown_->setEnabled(row < rowCount - 1);
-        actTop_->setEnabled(row > 0);
-        actBottom_->setEnabled(row < rowCount - 1);
+        // Moves are clamped inside the row's own block (pinned on top),
+        // so disable actions that would cross the boundary or no-op.
+        int pinnedCount = model_->pinnedCount();
+        bool inPinnedBlock = row < pinnedCount;
+        actUp_->setEnabled(row > (inPinnedBlock ? 0 : pinnedCount));
+        actDown_->setEnabled(row < (inPinnedBlock ? pinnedCount - 1 : rowCount - 1));
+        actTop_->setEnabled(actUp_->isEnabled());
+        actBottom_->setEnabled(actDown_->isEnabled());
 
         bool pinned = model_->isPinned(row);
 

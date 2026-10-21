@@ -30,11 +30,12 @@ public:
     void searchStocksAsync(const QString &keyword, quint64 requestId) override
     {
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
-        QString url = QString("http://suggest3.sinajs.cn/suggest/type=2&key=%1").arg(encodedKeyword);
+        QString url = QString("https://suggest3.sinajs.cn/suggest/type=2&key=%1").arg(encodedKeyword);
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setTransferTimeout(15000);
         request.setRawHeader("Referer", "https://finance.sina.com.cn");
 
         QNetworkReply *reply = netmgr_->get(request);
@@ -53,11 +54,12 @@ public:
             formattedCodes.append(formattedCode);
         }
 
-        QString url = QString("http://hq.sinajs.cn/list=%1").arg(formattedCodes.join(","));
+        QString url = QString("https://hq.sinajs.cn/list=%1").arg(formattedCodes.join(","));
 
         QNetworkRequest request;
         request.setUrl(QUrl(url));
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        request.setTransferTimeout(15000);
         request.setRawHeader("Referer", "https://finance.sina.com.cn");
 
         QNetworkReply *reply = netmgr_->get(request);

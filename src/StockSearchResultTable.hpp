@@ -61,13 +61,7 @@ public:
             if (config_->stockCodes.contains(it.code()))
             {
                 // for (auto item : items)
-                // {
-                // item->setForeground(Qt::gray);
-                // QFont ft = item->font();
-                // ft.setItalic(true);
-                // item->setFont(ft);
-                // }
-                continue;
+                continue;  // already in watchlist (gray-out variant abandoned)
             }
             model_->appendRow(items);
         }

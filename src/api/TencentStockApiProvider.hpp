@@ -29,6 +29,7 @@ public:
         QString encodedKeyword = QUrl::toPercentEncoding(keyword);
         QUrl url(QString("https://smartbox.gtimg.cn/s3/?v=2&t=all&c=1&q=%1").arg(encodedKeyword));
         QNetworkRequest req(url);
+        req.setTransferTimeout(15000);
         auto reply = netmgr_->get(req);
         reply->setProperty("searchKeyword", keyword);
         reply->setProperty("searchRequestId", QVariant::fromValue(requestId));
@@ -47,6 +48,7 @@ public:
 
         QUrl url(QString("https://qt.gtimg.cn/q=%1").arg(formattedCodes.join(",")));
         QNetworkRequest req(url);
+        req.setTransferTimeout(15000);
         auto reply = netmgr_->get(req);
         connect(reply, &QNetworkReply::finished, this, &TencentStockApiProvider::onStockInfoRequestSucceeded);
         connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
@@ -136,11 +138,6 @@ private slots:
         emit stockInfosReceived(stockInfos);
     }
 
-    void onRequestFailed(const QString &errorMessage, int statusCode)
-    {
-        Q_UNUSED(statusCode)
-        emit errorOccurred(errorMessage);
-    }
 
 private:
     QString decodeUnicodeEscapes(const QString &input)
@@ -252,76 +249,6 @@ private:
         return QString();
     }
 
-    // 这个方法在当前实现中未使用，移除以避免编译错误
-    /*
-    QList<StockInfo> parseTencentBatchStockData(const QStringList &originalCodes, const QStringList &formattedCodes, const QString &response)
-    {
-        QList<StockInfo> stockInfos;
-        QStringList lines = response.split("\n", Qt::SkipEmptyParts);
-
-        for (int i = 0; i < originalCodes.size() && i < formattedCodes.size(); ++i)
-        {
-            const QString &originalCode = originalCodes[i];
-            const QString &formattedCode = formattedCodes[i];
-
-            QString stockLine;
-            for (const QString &line : lines)
-            {
-                // 使用更精确的匹配模式，确保找到正确的股票数据行
-                if (line.startsWith(QString("v_%1=").arg(formattedCode)) || line.contains(QString("=\"%1~").arg(formattedCode)))
-                {
-                    stockLine = line;
-                    break;
-                }
-            }
-
-            if (!stockLine.isEmpty())
-            {
-                StockInfo stockInfo = parseTencentStockData(originalCode, stockLine);
-                if (!stockInfo.code().isEmpty())
-                {
-                    stockInfos.append(stockInfo);
-                }
-            }
-            else
-            {
-                // 尝试使用不同的格式化方式再次查找
-                QString altFormattedCode;
-                if (originalCode.startsWith("SH"))
-                {
-                    altFormattedCode = "sh" + originalCode.mid(2);
-                }
-                else if (originalCode.startsWith("SZ"))
-                {
-                    altFormattedCode = "sz" + originalCode.mid(2);
-                }
-
-                if (!altFormattedCode.isEmpty())
-                {
-                    for (const QString &line : lines)
-                    {
-                        if (line.startsWith(QString("v_%1=").arg(altFormattedCode)) || line.contains(QString("=\"%1~").arg(altFormattedCode)))
-                        {
-                            stockLine = line;
-                            break;
-                        }
-                    }
-
-                    if (!stockLine.isEmpty())
-                    {
-                        StockInfo stockInfo = parseTencentStockData(originalCode, stockLine);
-                        if (!stockInfo.code().isEmpty())
-                        {
-                            stockInfos.append(stockInfo);
-                        }
-                    }
-                }
-            }
-        }
-
-        return stockInfos;
-    }
-    */
 
     StockInfo parseTencentStockData(const QString &code, const QString &response)
     {

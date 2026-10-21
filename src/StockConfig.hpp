@@ -5,6 +5,7 @@
 #include <QSettings>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QVariant>
 
 struct StockConfig
@@ -54,11 +55,24 @@ struct StockConfig
 
     ~StockConfig()
     {
+        if (saveTimer_)
+        {
+            saveTimer_->stop();
+            delete saveTimer_;
+            saveTimer_ = nullptr;
+        }
         if (QCoreApplication::instance())
-            save();
+            saveNow();
     }
 
+    // Debounced: frequent calls (drag reorder, row ops) collapse into one disk write.
     void save()
+    {
+        ensureSaveTimer();
+        saveTimer_->start(500);
+    }
+
+    void saveNow()
     {
         QSettings settings(filepath_, QSettings::IniFormat);
         settings.setValue("api/source", apiSource);
@@ -103,5 +117,16 @@ struct StockConfig
     }
 
 private:
+    void ensureSaveTimer()
+    {
+        if (!saveTimer_)
+        {
+            saveTimer_ = new QTimer;  // no QObject parent here; deleted in dtor
+            saveTimer_->setSingleShot(true);
+            QObject::connect(saveTimer_, &QTimer::timeout, [this] { saveNow(); });
+        }
+    }
+
     QString filepath_;
+    QTimer *saveTimer_{ nullptr };
 };
