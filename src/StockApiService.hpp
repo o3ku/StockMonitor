@@ -54,6 +54,7 @@ public:
         if (activeProvider_) disconnectProvider(activeProvider_.data());
         activeProvider_.reset(factory(this));
         activeProviderName_ = resolved;
+        activeProvider_->setNetworkProxy(networkProxy_);
         connectProvider(activeProvider_.data());
         emit providerChanged(activeProvider_->name());
 
@@ -63,6 +64,19 @@ public:
     void switchProvider(const QString &name)
     {
         setActiveProvider(name);
+    }
+
+    // Network proxy: "off" (default, direct) or "system" (OS settings).
+    // Stored so a provider created later (e.g. on source switch) gets
+    // the same mode, and applied to the active provider immediately.
+    void setNetworkProxy(const QString &mode)
+    {
+        const QString normalized = mode.trimmed().toLower();
+        networkProxy_ = normalized == "system" ? "system" : "off";
+        if (activeProvider_)
+        {
+            activeProvider_->setNetworkProxy(networkProxy_);
+        }
     }
 
     quint64 searchStocksAsync(const QString &keyword)
@@ -143,5 +157,6 @@ private:
     QMap<QString, ProviderFactory> factories_;
     QScopedPointer<IStockApiProvider> activeProvider_;
     QString activeProviderName_;
+    QString networkProxy_{ "off" };
     quint64 nextSearchRequestId_{ 0 };
 };
