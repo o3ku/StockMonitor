@@ -13,6 +13,7 @@ struct StockConfig
     QStringList stockCodes;
     QStringList pinnedStocks;
     QString apiSource;
+    QString networkProxy{ "off" };
     QString hotkey{ "Ctrl+Alt+S" };
     QString theme{ "light" };
     qreal windowOpacity{ 1.0 };
@@ -29,6 +30,13 @@ struct StockConfig
         QSettings settings(filepath_, QSettings::IniFormat);
 
         apiSource = settings.value("api/source", "sina").toString();
+        // Network proxy: "off" (default, direct) or "system" (OS proxy settings).
+        // Anything else in an old/hand-edited stocks.ini falls back to "off".
+        networkProxy = settings.value("Network/Proxy", "off").toString().trimmed().toLower();
+        if (networkProxy != "system")
+        {
+            networkProxy = "off";
+        }
         stockCodes = settings.value("Stock/Codes").toString().split(",", Qt::SkipEmptyParts);
         pinnedStocks = settings.value("Stock/Pinned").toString().split(",", Qt::SkipEmptyParts);
 
@@ -76,6 +84,7 @@ struct StockConfig
     {
         QSettings settings(filepath_, QSettings::IniFormat);
         settings.setValue("api/source", apiSource);
+        settings.setValue("Network/Proxy", networkProxy);
         settings.setValue("Stock/Codes", stockCodes.join(","));
         settings.setValue("Stock/Pinned", pinnedStocks.join(","));
 

@@ -52,6 +52,7 @@ public:
         , settingsOverlay_(new QWidget(this))
         , settingsPanel_(new QFrame(settingsOverlay_))
         , settingsApiSource_(new QComboBox(settingsPanel_))
+        , settingsNetworkProxy_(new QComboBox(settingsPanel_))
         , settingsRefreshSpin_(new QSpinBox(settingsPanel_))
         , settingsAutoHideCombo_(new QComboBox(settingsPanel_))
         , settingsThemeCombo_(new QComboBox(settingsPanel_))
@@ -81,6 +82,7 @@ public:
                 focusSearchInput();
             }
         });
+        applyNetworkProxy();
         applyApiSource();
 
         setAttribute(Qt::WA_DeleteOnClose, false);
@@ -578,6 +580,11 @@ private:
         settingsApiSource_->setObjectName("settingsCombo");
         form->addRow("数据来源:", settingsApiSource_);
 
+        settingsNetworkProxy_->addItem("Off", "off");
+        settingsNetworkProxy_->addItem("System", "system");
+        settingsNetworkProxy_->setObjectName("settingsCombo");
+        form->addRow("Network Proxy:", settingsNetworkProxy_);
+
         settingsRefreshSpin_->setRange(1000, 60000);
         settingsRefreshSpin_->setSingleStep(1000);
         settingsRefreshSpin_->setSuffix(" 毫秒");
@@ -614,6 +621,7 @@ private:
         settingsOverlay_->installEventFilter(this);
         settingsPanel_->installEventFilter(this);
         settingsApiSource_->installEventFilter(this);
+        settingsNetworkProxy_->installEventFilter(this);
         settingsRefreshSpin_->installEventFilter(this);
         settingsAutoHideCombo_->installEventFilter(this);
         settingsThemeCombo_->installEventFilter(this);
@@ -625,6 +633,9 @@ private:
     {
         int apiIndex = settingsApiSource_->findData(config_->apiSource);
         settingsApiSource_->setCurrentIndex(apiIndex != -1 ? apiIndex : 0);
+
+        int proxyIndex = settingsNetworkProxy_->findData(config_->networkProxy);
+        settingsNetworkProxy_->setCurrentIndex(proxyIndex != -1 ? proxyIndex : 0);
 
         settingsRefreshSpin_->setValue(config_->refreshInterval);
         int autoHideIndex = settingsAutoHideCombo_->findData(config_->autoHideDelay);
@@ -640,6 +651,11 @@ private:
     void applySettingsOverlayValues()
     {
         config_->apiSource = settingsApiSource_->currentData().toString();
+        config_->networkProxy = settingsNetworkProxy_->currentData().toString();
+        if (config_->networkProxy != "system")
+        {
+            config_->networkProxy = "off";
+        }
         config_->refreshInterval = settingsRefreshSpin_->value();
         config_->theme = settingsThemeCombo_->currentData().toString();
         config_->windowOpacity = settingsOpacitySpin_->value();
@@ -650,6 +666,7 @@ private:
         setWindowOpacity(config_->windowOpacity);
         table_->applyRowHeight(config_->rowHeight);
         applyTheme();
+        applyNetworkProxy();
         applyApiSource();
     }
 
@@ -834,7 +851,7 @@ private:
             "QAbstractItemView::item:selected { background-color: %5; color: %6; }")
                                       .arg(background.name(), text.name(), border.name(), hover.name(), selectedBackground.name(), selectedText.name());
 
-        for (QComboBox *combo : { settingsApiSource_, settingsAutoHideCombo_, settingsThemeCombo_ })
+        for (QComboBox *combo : { settingsApiSource_, settingsNetworkProxy_, settingsAutoHideCombo_, settingsThemeCombo_ })
         {
             if (!combo || !combo->view()) continue;
             QPalette palette = combo->view()->palette();
@@ -847,6 +864,12 @@ private:
             combo->view()->setStyleSheet(viewStyle);
             combo->view()->update();
         }
+    }
+
+    void applyNetworkProxy()
+    {
+        apiService_.setNetworkProxy(config_->networkProxy);
+        Logger::info(QString("Network proxy: %1").arg(config_->networkProxy));
     }
 
     void applyApiSource()
@@ -883,6 +906,7 @@ private:
     QWidget *settingsOverlay_;
     QFrame *settingsPanel_;
     QComboBox *settingsApiSource_;
+    QComboBox *settingsNetworkProxy_;
     QSpinBox *settingsRefreshSpin_;
     QComboBox *settingsAutoHideCombo_;
     QComboBox *settingsThemeCombo_;
