@@ -1,25 +1,25 @@
 # StockMonitor
 
-## 是什么
+## What is it?
 
-StockMonitor 是一个基于 Qt5 和 C++17 的轻量级股票监控工具，用于在桌面上快速查看自选股票和主要指数行情。
+StockMonitor is a lightweight stock monitoring tool based on Qt5 and C++17, for quickly checking your watchlist stocks and major market indices from the desktop.
 
-它支持通过全局快捷键呼出窗口，适合长期后台运行和快速查看行情。
+It supports bringing up the window with a global hotkey, making it well suited to running in the background long-term and checking quotes at a glance.
 
-## 主要功能
+## Key features
 
-- 实时刷新自选股票价格、涨跌幅和成交信息
-- 支持新浪财经、腾讯财经、东方财富数据源
-- 支持 A 股、港股、美股搜索和添加
-- 支持上证指数、深证成指、创业板指展示
-- 支持股票列表拖拽排序、右键移动和删除
-- 支持全局快捷键显示或隐藏窗口
-- 支持亮色/暗色主题、窗口透明度、行高和刷新间隔设置
-- 支持自动隐藏和系统托盘后台运行
+- Real-time updates of watchlist stock prices, gains/losses, and trading information
+- Supports Sina Finance, Tencent Finance, and Eastmoney as data sources
+- Supports searching for and adding A-shares, Hong Kong stocks, and US stocks
+- Supports displaying the Shanghai Composite Index, Shenzhen Component Index, and ChiNext Index
+- Supports drag-and-drop reordering of the stock list, and moving or deleting stocks via the right-click menu
+- Supports showing or hiding the window with a global hotkey
+- Supports light/dark themes, window opacity, row height, and refresh interval settings
+- Supports auto-hide and running in the background in the system tray
 
-## 支持平台
+## Supported platforms
 
 - Windows 10
 - Windows 11
 
-构建环境需要 MSVC、Qt5、CMake 和 OpenSSL。
+The build environment requires MSVC, Qt5, CMake, and OpenSSL.
