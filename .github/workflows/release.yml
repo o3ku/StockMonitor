@@ -1,0 +1,144 @@
+name: Release
+
+# Windows-only build, mirroring o3ku/SongBird's release.yml Windows job:
+# a pinned prebuilt static Qt5 (vcpkg install root) on windows-2022,
+# so the release asset is a single exe with no Qt DLLs beside it.
+# A push to develop is the compile gate; a v* tag also publishes the
+# GitHub release with the exe and its SHA256 file.
+on:
+  push:
+    branches:
+      - develop
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One build per ref. Never cancel in progress: a tag build creates the
+# GitHub release as its last act, so a run killed before that leaves a
+# pushed tag with no asset behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The triplet the prebuilt Qt bundle was built for, and the name of the
+  # directory inside the extracted install root. `Install Qt5 (static)` and
+  # `Configure` both read it, so the two cannot drift apart.
+  VCPKG_TRIPLET: x64-windows-static-md
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 240
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # QHotkey lives in Libs/QHotkey as a submodule.
+          submodules: recursive
+
+      - name: Install Qt5 (static)
+        id: qt5
+        # A pinned prebuilt vcpkg install root instead of running `vcpkg install`
+        # here. Qt5 stays statically linked, so the release asset is still one exe
+        # with no Qt DLLs beside it - which is why jurplel/install-qt-action (the
+        # official, dynamically-linked Qt) is not an alternative worth having: it
+        # would turn the release into a bundle that needs windeployqt.
+        #
+        # The action is pinned to a commit rather than to `@v1`, because a tag can
+        # be moved and this step decides what every release binary links against.
+        # `tag` is a literal on purpose too: the bundle is immutable and
+        # SHA256-verified by the action, so a bump is a visible edit here rather
+        # than a silent cache miss, and the tag names the runner image it was
+        # built on - the one thing to reconsider if `runs-on` ever moves away from
+        # windows-2022.
+        #
+        # qt5-base's default features include openssl, so find_package(OpenSSL)
+        # in CMakeLists.txt resolves against this same install root.
+        uses: o3ku/qt-static@f39a48465c5c788ed5e035f3a4a4e46552a6b423
+        with:
+          tag: qt5-win2022-20261024-0121
+          # The extracted root is what `Configure` passes as VCPKG_INSTALLED_DIR.
+          # There is no vcpkg.json in this repository, so the toolchain runs in
+          # classic mode: it appends <dir>/<triplet> to CMAKE_PREFIX_PATH and never
+          # invokes vcpkg.exe.
+          dest: ${{ github.workspace }}/vcpkg_installed
+
+      - name: Set up MSVC
+        uses: TheMrMilchmann/setup-msvc-dev@v4
+        with:
+          arch: x64
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TRIPLET" `
+            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed"
+
+          if (-not (Select-String -Path build/CMakeCache.txt -Pattern '^Qt5_DIR:' -Quiet)) {
+            throw 'Qt5 was not found; the build picked a different Qt than the one intended'
+          }
+          if (-not (Select-String -Path build/CMakeCache.txt -Pattern '^OPENSSL_INCLUDE_DIR:' -Quiet)) {
+            throw 'OpenSSL was not found'
+          }
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Smoke test
+        shell: pwsh
+        run: |
+          # --api-test exercises all three providers (Sina, Tencent,
+          # Eastmoney) against the live APIs and exits non-zero on
+          # failure. StockMonitor.exe is a GUI (WIN32) executable, so
+          # PowerShell would not wait for it or surface its exit code
+          # if run directly; Start-Process -Wait does both.
+          $p = Start-Process -FilePath 'build/StockMonitor.exe' -ArgumentList '--api-test' -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "StockMonitor --api-test failed with exit code $($p.ExitCode)" }
+
+      - name: Stage release asset
+        shell: pwsh
+        run: Copy-Item build/StockMonitor.exe StockMonitor.exe -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: stockmonitor-exe
+          path: StockMonitor.exe
+
+      - name: Verify tag matches the embedded version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          # A tag and the version the binary reports are two independent edits,
+          # and nothing used to compare them: tagging v1.7.1 without bumping
+          # project(VERSION) would publish a release whose exe says 1.7.0.
+          $tag = "${{ github.ref_name }}" -replace '^v', ''
+          $line = Get-Content -LiteralPath 'CMakeLists.txt' | Where-Object { $_ -match 'project\(StockMonitor VERSION ([0-9.]+)' } | Select-Object -First 1
+          if (-not $line -or $line -notmatch 'VERSION ([0-9.]+)') { throw 'Could not read project VERSION from CMakeLists.txt' }
+          $version = $Matches[1]
+          if ($version -ne $tag) { throw "Tag v$tag does not match project VERSION $version in CMakeLists.txt" }
+          Write-Host "Version check OK: $version"
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          $createArgs = @('release', 'create', $tag, 'StockMonitor.exe', '--title', "StockMonitor $version", '--generate-notes')
+          gh @createArgs
+          if ($LASTEXITCODE -ne 0) {
+            gh release upload $tag StockMonitor.exe --clobber
+          }
+          $exeHash = (Get-FileHash StockMonitor.exe -Algorithm SHA256).Hash.ToLower()
+          "$exeHash  StockMonitor.exe" | Set-Content StockMonitor.exe.sha256
+          gh release upload $tag StockMonitor.exe.sha256 --clobber
