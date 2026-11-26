@@ -580,10 +580,10 @@ private:
         settingsApiSource_->setObjectName("settingsCombo");
         form->addRow("数据来源:", settingsApiSource_);
 
-        settingsNetworkProxy_->addItem("Off", "off");
-        settingsNetworkProxy_->addItem("System", "system");
+        settingsNetworkProxy_->addItem("关闭", "off");
+        settingsNetworkProxy_->addItem("系统", "system");
         settingsNetworkProxy_->setObjectName("settingsCombo");
-        form->addRow("Network Proxy:", settingsNetworkProxy_);
+        form->addRow("网络代理:", settingsNetworkProxy_);
 
         settingsRefreshSpin_->setRange(1000, 60000);
         settingsRefreshSpin_->setSingleStep(1000);
